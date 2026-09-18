@@ -15,7 +15,7 @@ export const TUNING = {
   FALL_ALIGN: 1.4,      // /s, rappel du cap vers l axe de la piste quand la carre est lâchée
   EDGE_DRAG: 0.45,      // /s à steer = 1 : virer coûte, c'est tout l'arbitrage du jeu
   FRICTION: 0.06,       // /s, neige damée
-  AIR_DRAG: 0.0016,     // /m, pose la vitesse terminale
+  AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
   DEEP_DRAG: 1.2,       // /s hors piste
   TRACK_HALF: 18,       // m, demi-largeur de piste : au-delà les fanions sortent du cadre en portrait
 
