@@ -43,6 +43,22 @@ for (const [x, z] of [[3, -120], [-17, -2500]]) {
   assert.ok(Math.abs(azz - nzz) < 1e-2, `hzz faux en ${x},${z} : ${azz} contre ${nzz}`)
 }
 
+// Les tremplins sont dans la hauteur : on vérifie leurs dérivées sur le dos de l'un d'eux,
+// sinon le critère de décollage les lit faux et le saut part n'importe comment.
+const r = t1.jump(3, {})
+for (const [x, z] of [[r.x, r.z + 4], [r.x + 3, r.z - 2]]) {
+  const y0 = t1.sample(x, z).y
+  const ax = t1.sample(x, z).hx, az = t1.sample(x, z).hz
+  const nx = (t1.sample(x + e, z).y - t1.sample(x - e, z).y) / (2 * e)
+  const nz = (t1.sample(x, z + e).y - t1.sample(x, z - e).y) / (2 * e)
+  assert.ok(Math.abs(ax - nx) < 1e-3, `hx faux sur un tremplin : ${ax} contre ${nx}`)
+  assert.ok(Math.abs(az - nz) < 1e-3, `hz faux sur un tremplin : ${az} contre ${nz}`)
+  const azz = t1.sample(x, z).hzz
+  const nzz = (t1.sample(x, z + e).y - 2 * y0 + t1.sample(x, z - e).y) / (e * e)
+  assert.ok(Math.abs(azz - nzz) < 1e-2, `hzz faux sur un tremplin : ${azz} contre ${nzz}`)
+}
+assert.ok(t1.sample(r.x, r.z).y - t1.sample(r.x + 40, r.z).y > 1, 'le tremplin ne dépasse pas du terrain')
+
 // physique : 20 s de pas fixes, la carre bouge, rien ne part en NaN ni sous la neige
 const st = createState(123456)
 st.phase = 'run'

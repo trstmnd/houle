@@ -24,6 +24,15 @@ export function create(seed) {
 
   const out = { y: 0, hx: 0, hz: 0, hxx: 0, hxz: 0, hzz: 0 }
 
+  // Tremplin le plus proche, mis en cache : sample est appelé des milliers de fois par frame.
+  let rampN = NaN, rampX = 0, rampZ = 0
+  function ramp(n) {
+    if (n === rampN) return
+    rampN = n
+    rampZ = -n * T.JUMP_GAP
+    rampX = (hash(n, 7, p[4]) - 0.5) * T.TRACK_HALF
+  }
+
   function sample(x, z) {
     const s1 = Math.sin(a * x + p[0]), c1 = Math.cos(a * x + p[0])
     const s2 = Math.sin(b * z + p[1]), c2 = Math.cos(b * z + p[1])
@@ -38,31 +47,44 @@ export function create(seed) {
     const dA = T.MOG_AMP * 0.5 * f * fc
     const ddA = -T.MOG_AMP * 0.5 * f * f * fs
 
+    // Le tremplin : une bosse gaussienne, dérivable partout, donc le critère de décollage la voit.
+    ramp(Math.round(-z / T.JUMP_GAP))
+    const rx = x - rampX, rz = z - rampZ
+    const wx2 = T.JUMP_WX * T.JUMP_WX, wz2 = T.JUMP_WZ * T.JUMP_WZ
+    const e = T.JUMP_AMP * Math.exp(-(rx * rx / wx2 + rz * rz / wz2))
+    const ex = -2 * rx / wx2, ez = -2 * rz / wz2
+
     out.y = T.SLOPE * z
       + T.R1 * s1
       + T.R2 * s2
       + T.R3 * s3 * s4
       + A * S * Tz
+      + e
 
     out.hx = T.R1 * a * c1
       + T.R3 * c * c3 * s4
       + A * mx * C * Tz
+      + e * ex
 
     out.hz = T.SLOPE
       + T.R2 * b * c2
       + T.R3 * d * s3 * c4
       + (dA * Tz + A * mz * Cz) * S
+      + e * ez
 
     out.hxx = -T.R1 * a * a * s1
       - T.R3 * c * c * s3 * s4
       - A * mx * mx * S * Tz
+      + e * (ex * ex - 2 / wx2)
 
     out.hxz = T.R3 * c * d * c3 * c4
       + (dA * Tz + A * mz * Cz) * mx * C
+      + e * ex * ez
 
     out.hzz = -T.R2 * b * b * s2
       - T.R3 * d * d * s3 * s4
       + (ddA * Tz + 2 * dA * mz * Cz - A * mz * mz * Tz) * S
+      + e * (ez * ez - 2 / wz2)
 
     return out
   }
@@ -86,5 +108,14 @@ export function create(seed) {
     return out
   }
 
-  return { sample, tree, seed }
+  /** Position du tremplin numéro n, pour que le rendu puisse le baliser. */
+  function jump(n, out2) {
+    ramp(n)
+    out2.x = rampX
+    out2.z = rampZ
+    out2.y = sample(rampX, rampZ).y
+    return out2
+  }
+
+  return { sample, tree, jump, seed }
 }

@@ -51,6 +51,14 @@ export const TUNING = {
   R3: 5.0,
   MOG_AMP: 0.85,
 
+  // Tremplins : posés sur la piste, ils sont dans le terrain, donc la physique les gère toute seule.
+  JUMP_GAP: 210,        // m entre deux tremplins
+  JUMP_AMP: 2.8,        // m de haut
+  JUMP_WX: 7,           // m de demi-largeur
+  JUMP_WZ: 9,           // m de demi-longueur
+  JUMP_SHORT: 18,       // m : en dessous, saut court
+  JUMP_MID: 45,         // m : en dessous, saut moyen, au-dessus saut long
+
   // Portes (bloc 3)
   GATE_GAP: 140,
   GATE_W: 9,
@@ -97,6 +105,7 @@ export function createState(seed) {
     lean: 0,                       // inclinaison lissée du skieur, pour le rendu
     grounded: true,
     airTime: 0,
+    jumpX: 0, jumpZ: 0, lastJump: 0, bestJump: 0,
     wipe: 0,                       // temps de chute restant
     dist: 0,                       // mètres descendus
     score: 0, chain: 0, mult: 1,
@@ -169,6 +178,8 @@ function stepGround(state, dt) {
   if (kappa > 0 && s * s * kappa > T.G * T.STICK * ninv) {
     state.grounded = false
     state.airTime = 0
+    state.jumpX = state.x                 // d'où on est parti : la longueur du saut se mesure à l'arrivée
+    state.jumpZ = state.z
     state.events.push('takeoff')
   }
 }
@@ -219,6 +230,15 @@ function land(state, g) {
     state.chain = 0
     state.mult = T.MULT_TABLE[0]
     state.events.push('wipe')
+  }
+
+  // Longueur du saut : trois paliers, trois sons. Une chute ne compte pas comme un saut.
+  const len = Math.hypot(state.x - state.jumpX, state.z - state.jumpZ)
+  state.lastJump = len
+  if (state.wipe <= 0) {
+    if (len < T.JUMP_SHORT) state.events.push('jump_short')
+    else if (len < T.JUMP_MID) state.events.push('jump_mid')
+    else { state.events.push('jump_long'); if (len > state.bestJump) state.bestJump = len }
   }
 
   state.s = clamp(state.s, T.MIN_SPEED, T.MAX_SPEED)
