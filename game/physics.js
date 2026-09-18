@@ -7,7 +7,7 @@ export const STEP = 1 / 120
 export const TUNING = {
   // Glisse
   G: 9.81,
-  SLOPE: 0.30,          // pente moyenne, 17°
+  SLOPE: 0.37,          // pente moyenne, 20°
   MAX_SPEED: 45,        // m/s
   MIN_SPEED: 2,
   START_SPEED: 12,
