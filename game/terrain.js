@@ -108,6 +108,21 @@ export function create(seed) {
     return out
   }
 
+  // Hauteur seule, sans les dérivées : c'est tout ce dont le maillage a besoin, et il appelle
+  // des milliers de fois. Deux fois moins de trigonométrie que sample.
+  function height(x, z) {
+    ramp(Math.round(-z / T.JUMP_GAP))
+    const rx = x - rampX, rz = z - rampZ
+    const u = rx * rx / (T.JUMP_WX * T.JUMP_WX) + rz * rz / (T.JUMP_WZ * T.JUMP_WZ)
+    const e = u > 9 ? 0 : T.JUMP_AMP * Math.exp(-u)     // au-delà de 3 sigmas le tremplin ne vaut rien
+    return T.SLOPE * z
+      + T.R1 * Math.sin(a * x + p[0])
+      + T.R2 * Math.sin(b * z + p[1])
+      + T.R3 * Math.sin(c * x + p[2]) * Math.sin(d * z + p[3])
+      + T.MOG_AMP * (0.5 + 0.5 * Math.sin(f * z + p[5 + 1])) * Math.sin(mx * x + p[4]) * Math.sin(mz * z + p[5])
+      + e
+  }
+
   /** Position du tremplin numéro n, pour que le rendu puisse le baliser. */
   function jump(n, out2) {
     ramp(n)
@@ -117,5 +132,5 @@ export function create(seed) {
     return out2
   }
 
-  return { sample, tree, jump, seed }
+  return { sample, height, tree, jump, seed }
 }

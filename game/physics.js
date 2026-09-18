@@ -73,9 +73,9 @@ export const TUNING = {
   FOV_FAST: 88,
   FOV_RATE: 2.5,
   TREE_GAP: 16,         // m entre deux arbres du réseau
-  GRID_NX: 96,
-  GRID_NZ: 128,
-  CELL: 3.2,            // m entre deux sommets du maillage
+  GRID_NX: 112,
+  GRID_NZ: 168,
+  CELL: 2.4,            // m entre deux sommets du maillage : 5 sommets par bosse, sinon c'est de la bouillie
   FOG_NEAR: 60,
   FOG_FAR: 330,
 }
