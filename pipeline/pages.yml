@@ -1,0 +1,41 @@
+name: pages
+# Chaque push déploie game/ sur gh-pages : main à la racine, toute autre branche dans preview/<branche>/.
+# check.sh d'abord : rouge = rien ne part.
+on:
+  push:
+    branches: ['**', '!gh-pages']
+permissions:
+  contents: write
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: check.sh
+        run: sh check.sh
+      - name: Dossier cible
+        id: dest
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "dir=" >> "$GITHUB_OUTPUT"
+            echo "url=https://trstmnd.github.io/houle/" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=preview/$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "url=https://trstmnd.github.io/houle/preview/$GITHUB_REF_NAME/" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./game
+          destination_dir: ${{ steps.dest.outputs.dir }}
+          keep_files: true
+          commit_message: 'deploy ${{ github.ref_name }} ${{ github.sha }}'
+      - name: URL
+        run: echo "${{ steps.dest.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
