@@ -1,92 +1,71 @@
-// Terrain seedé : somme de 3 sinusoïdes modulées + pente moyenne. PUR. Voir SPEC.md §5.
-// Dérivées analytiques : le critère de décollage lit h'' à chaque pas.
+// Terrain de ski : hauteur analytique h(x, z) et ses 5 dérivées. PUR. Voir SPEC.md §4.
+// y vers le haut, la piste descend vers -Z. Les dérivées secondes servent au décollage.
 import { mulberry32 } from './rng.js'
 import { TUNING } from './physics.js'
 
-const SCAN = 8    // u, pas de balayage pour les crêtes et les inflexions
-const REFINE = 4  // bissections, ramène les 8 u à 0,5 u
-
 /**
- * @returns {{ sample(x): {y, dy, ddy}, crests(x0, x1): {x, y}[], inflectionBefore(xc): number, layer(k, xScreen): number, wind: number }}
+ * @returns {{ sample(x, z): {y, hx, hz, hxx, hxz, hzz} }}
  */
 export function create(seed) {
   const rnd = mulberry32(seed)
-  // Ordre des tirages = contrat : φ0 fixé (départ sur une crête), φ1, φ2, ψ0, ψ1, ψ2, puis le vent.
-  const phi = [1.5 * Math.PI, rnd() * 2 * Math.PI, rnd() * 2 * Math.PI]
-  const psi = [rnd() * 2 * Math.PI, rnd() * 2 * Math.PI, rnd() * 2 * Math.PI]
-  const wind = (rnd() * 2 - 1) * TUNING.WIND_MAX
+  // Ordre des tirages = contrat : p1 à p7, puis rien.
+  const p = new Array(7)
+  for (let i = 0; i < 7; i++) p[i] = rnd() * 2 * Math.PI
 
-  // Pulsations et amplitudes figées à la création : rien à recalculer dans la boucle.
-  const n = TUNING.OCT_AMP.length
-  const k = new Array(n), m = new Array(n), amp = new Array(n)
-  for (let i = 0; i < n; i++) {
-    k[i] = 2 * Math.PI / (TUNING.HILL_WAVE * TUNING.OCT_WAVE[i])
-    m[i] = k[i] / TUNING.MOD_WAVE
-    amp[i] = TUNING.HILL_BASE * TUNING.OCT_AMP[i]
-  }
+  const T = TUNING
+  // Pulsations figées à la création : la boucle ne recalcule rien.
+  const a = 2 * Math.PI / T.WAVE_X          // houle latérale
+  const b = 2 * Math.PI / T.WAVE_Z          // rouleaux en travers
+  const c = 2 * Math.PI / T.WAVE_BIG_X      // relief large
+  const d = 2 * Math.PI / T.WAVE_BIG_Z
+  const mx = 2 * Math.PI / T.MOG_X          // pas des bosses
+  const mz = 2 * Math.PI / T.MOG_Z
+  const f = 2 * Math.PI / T.MOG_BAND        // alternance lisse / champ de bosses
 
-  // Un seul objet rendu, réutilisé à chaque appel : la boucle n'alloue pas (CLAUDE.md règle 5).
-  // Donc on lit ses champs tout de suite, on ne garde jamais deux sample() vivants en même temps.
-  const out = { y: 0, dy: 0, ddy: 0 }
+  const out = { y: 0, hx: 0, hz: 0, hxx: 0, hxz: 0, hzz: 0 }
 
-  function sample(x) {
-    let y = TUNING.SLOPE_AVG * x
-    let dy = TUNING.SLOPE_AVG
-    let ddy = 0
-    for (let i = 0; i < n; i++) {
-      const s = Math.sin(k[i] * x + phi[i]), c = Math.cos(k[i] * x + phi[i])
-      const ms = Math.sin(m[i] * x + psi[i]), mc = Math.cos(m[i] * x + psi[i])
-      const A = amp[i] * (1 + TUNING.MOD_DEPTH * ms)          // amplitude modulée
-      const dA = amp[i] * TUNING.MOD_DEPTH * m[i] * mc
-      const ddA = -amp[i] * TUNING.MOD_DEPTH * m[i] * m[i] * ms
-      y += A * s
-      dy += dA * s + A * k[i] * c                              // règle du produit
-      ddy += ddA * s + 2 * dA * k[i] * c - A * k[i] * k[i] * s
-    }
-    out.y = y; out.dy = dy; out.ddy = ddy
+  function sample(x, z) {
+    const s1 = Math.sin(a * x + p[0]), c1 = Math.cos(a * x + p[0])
+    const s2 = Math.sin(b * z + p[1]), c2 = Math.cos(b * z + p[1])
+    const s3 = Math.sin(c * x + p[2]), c3 = Math.cos(c * x + p[2])
+    const s4 = Math.sin(d * z + p[3]), c4 = Math.cos(d * z + p[3])
+    const S = Math.sin(mx * x + p[4]), C = Math.cos(mx * x + p[4])       // bosses en x
+    const Tz = Math.sin(mz * z + p[5]), Cz = Math.cos(mz * z + p[5])     // bosses en z
+    const fs = Math.sin(f * z + p[6]), fc = Math.cos(f * z + p[6])
+
+    // Amplitude des bosses, fonction de z seul : des bandes lisses, des bandes bosselées.
+    const A = T.MOG_AMP * (0.5 + 0.5 * fs)
+    const dA = T.MOG_AMP * 0.5 * f * fc
+    const ddA = -T.MOG_AMP * 0.5 * f * f * fs
+
+    out.y = T.SLOPE * z
+      + T.R1 * s1
+      + T.R2 * s2
+      + T.R3 * s3 * s4
+      + A * S * Tz
+
+    out.hx = T.R1 * a * c1
+      + T.R3 * c * c3 * s4
+      + A * mx * C * Tz
+
+    out.hz = T.SLOPE
+      + T.R2 * b * c2
+      + T.R3 * d * s3 * c4
+      + (dA * Tz + A * mz * Cz) * S
+
+    out.hxx = -T.R1 * a * a * s1
+      - T.R3 * c * c * s3 * s4
+      - A * mx * mx * S * Tz
+
+    out.hxz = T.R3 * c * d * c3 * c4
+      + (dA * Tz + A * mz * Cz) * mx * C
+
+    out.hzz = -T.R2 * b * b * s2
+      - T.R3 * d * d * s3 * s4
+      + (ddA * Tz + 2 * dA * mz * Cz - A * mz * mz * Tz) * S
+
     return out
   }
 
-  /** Minima locaux de h : y vers le bas, une crête est un minimum. */
-  function crests(x0, x1) {
-    const found = []
-    let prev = sample(x0).dy
-    for (let x = x0 + SCAN; x <= x1; x += SCAN) {
-      const cur = sample(x).dy
-      if (prev < 0 && cur >= 0) {
-        let lo = x - SCAN, hi = x
-        for (let i = 0; i < REFINE; i++) {
-          const mid = (lo + hi) / 2
-          if (sample(mid).dy < 0) lo = mid; else hi = mid
-        }
-        const xc = (lo + hi) / 2
-        found.push({ x: xc, y: sample(xc).y })
-      }
-      prev = cur
-    }
-    return found
-  }
-
-  /** Dernier x avant la crête où la montée commence à s'arrondir : c'est là que le tir devient possible. */
-  function inflectionBefore(xc) {
-    const span = TUNING.HILL_WAVE
-    for (let d = SCAN; d <= span; d += SCAN) {
-      if (sample(xc - d).ddy <= 0) {
-        let lo = xc - d, hi = xc - d + SCAN
-        for (let i = 0; i < REFINE; i++) {
-          const mid = (lo + hi) / 2
-          if (sample(mid).ddy <= 0) lo = mid; else hi = mid
-        }
-        return (lo + hi) / 2
-      }
-    }
-    return xc - span
-  }
-
-  function layer(k, xScreen) {
-    // Session 4 : silhouette de fond k ∈ {1, 2}, espace écran, sans SLOPE_AVG
-    return 0
-  }
-
-  return { sample, crests, inflectionBefore, layer, wind, phi, psi }
+  return { sample, seed }
 }
