@@ -489,6 +489,14 @@ export function draw(state, dt) {
   renderer.render(scene, camera)
 }
 
+// Le pied reste à plat sur le ski quoi que fasse le genou : la chaussure annule la rotation
+// accumulée par la cuisse et le tibia.
+function poseJambe(cuisse, tibia, chaussure, alpha) {
+  cuisse.rotation.x = alpha
+  tibia.rotation.x = -2 * alpha
+  chaussure.rotation.x = alpha
+}
+
 // Le skieur, image par image. Tout vient de state : la carre, la charge, le vol, la chute, l'œuf.
 // Rien ne s'accumule ici sauf le ressort des jambes, qui a besoin d'une mémoire d'une frame.
 function animeSkieur(state, dt) {
@@ -519,11 +527,10 @@ function animeSkieur(state, dt) {
   const d = clamp(hanche, 0.3, THIGH + SHIN - 0.02)
   const alpha = Math.atan2(Math.sqrt(Math.max(0, THIGH * THIGH - d * d * 0.25)), d * 0.5)
   hips.position.y = d
-  for (const [cuisse, tibia, chaussure] of [[thighL, shinL, bootL], [thighR, shinR, bootR]]) {
-    cuisse.rotation.x = alpha
-    tibia.rotation.x = -2 * alpha
-    chaussure.rotation.x = alpha     // le pied reste à plat sur le ski quoi que fasse le genou
-  }
+  // Deux appels plutôt qu'une boucle sur un tableau : la boucle allouait trois tableaux et deux
+  // itérateurs par frame, soit 10 000 objets par run à ramasser. Règle 5 de CLAUDE.md.
+  poseJambe(thighL, shinL, bootL, alpha)
+  poseJambe(thighR, shinR, bootR, alpha)
   // La jambe extérieure porte : elle se tend, l'intérieure se replie sous le corps.
   thighL.rotation.z = lean * 0.14
   thighR.rotation.z = lean * 0.14
