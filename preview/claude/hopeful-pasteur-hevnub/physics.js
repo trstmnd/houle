@@ -78,7 +78,7 @@ export const TUNING = {
   GRID_NX: 112,
   GRID_NZ: 168,
   CELL: 2.4,            // m entre deux sommets du maillage : 5 sommets par bosse, sinon c'est de la bouillie
-  FOG_NEAR: 60,
+  FOG_NEAR: 130,
   FOG_FAR: 330,
 }
 
