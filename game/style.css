@@ -156,6 +156,7 @@ html, body {
 .zone-r { border-left: 1px solid rgba(255, 255, 255, 0.14); }
 .playing .zone-l, .playing .zone-r { border-color: transparent; }
 .chev {
+  transition: opacity 0.25s ease-out, background 0.12s ease-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -173,15 +174,16 @@ html, body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   opacity: 0.85;
+  transition: opacity 0.25s ease-out;
   text-shadow: 0 1px 6px rgba(20, 14, 40, 0.8);
 }
 .zone.on { background: rgba(255, 255, 255, 0.12); }
 .zone.on .chev { background: var(--accent); }
 
-/* Pendant la run, les zones s'effacent : elles restent actives mais ne mangent plus l'image. */
-.playing .zone .chev { background: rgba(255, 255, 255, 0.1); }
-.playing .zone .tag { opacity: 0; }
-.playing .zone.on .chev { background: var(--accent); }
+/* Pendant la run, les zones disparaissent : elles restent actives sous le doigt, mais plus rien
+   ne se dessine par-dessus la montagne. Le didacticiel est sur l'écran de titre, pas en jeu. */
+.playing .zone .chev, .playing .zone .tag { opacity: 0; }
+.playing .zone.on, .playing .zone.on .chev { background: transparent; }
 
 .gauge {
   position: absolute;
