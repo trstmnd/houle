@@ -231,6 +231,9 @@ h1 {
 .meta { margin: 0; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .meta b { font-weight: 800; color: var(--ink); }
 
+.version { margin: 10px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--ink-soft); opacity: 0.7; }
+.version b { font-weight: 700; }
+
 .label { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.14em; }
 .big { margin: 2px 0 10px; display: flex; align-items: baseline; justify-content: center; gap: 6px; }
 .big b { font-size: clamp(60px, 19vw, 96px); font-weight: 800; line-height: 1; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
