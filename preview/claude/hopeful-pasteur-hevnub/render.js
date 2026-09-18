@@ -7,6 +7,7 @@ const SKY_TOP = 0x2F7BC4, SKY_LOW = 0xCFE8F7, FOG = 0xCFE8F7
 const SNOW = 0xFFFFFF, SNOW_SHADE = 0x6E97C6, ROCK = 0x6E6357
 const STONE = 0x6A6E74, TRACK_COL = 0xB9CFE4
 const GATE_L = 0xE0453A, GATE_R = 0x1F7BB7   // rouge à gauche, bleu à droite, comme un slalom
+const PYLON = 0x8D949B, CABLE = 0x3A434B, CHAIR = 0xD9532E
 const PINE = 0x27443A, TRUNK = 0x4A3524, SUN = 0xFFF6E2
 const RAMP = 0xF08A2B
 const PEAK_HI = 0xE8F2FA, PEAK_LO = 0xA9C9E2   // chaîne lointaine : blanche en haut, noyée de brume en bas
@@ -14,6 +15,8 @@ const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
 let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+let pylons, cables, chairs
+let liftRow = NaN
 const gateCol = { vif: null, terne: null }
 const ramp = { x: 0, y: 0, z: 0 }
 const HIDE = -9999                    // hauteur où l'on range une instance inutilisée
@@ -45,6 +48,10 @@ const FLAG_N = 30                     // fanions par rangée
 const TREE_LANES = 9                  // cases de part et d'autre de la piste
 const TREE_ROWS = 26                  // cases devant le skieur
 const TREE_N = (2 * TREE_LANES + 1) * TREE_ROWS
+const LIFT_X = -82                    // m, le télésiège longe la piste, hors du couloir
+const LIFT_GAP = 62                   // m entre deux pylônes
+const LIFT_N = 8                      // pylônes visibles à la fois
+const LIFT_H = 13                     // m de haut
 const RAMP_N = 4          // tremplins balisés devant le skieur
 const RAMP_POSTS = 2      // un piquet de chaque côté de la table
 
@@ -169,6 +176,17 @@ export function init(canvas) {
     }
   }
 
+  // Télésiège : c'est lui qui dit qu'on est dans une station et pas sur une colline déserte.
+  const pylonGeo = new THREE.BoxGeometry(0.9, LIFT_H, 0.9)
+  pylonGeo.translate(0, LIFT_H / 2, 0)
+  pylons = new THREE.InstancedMesh(pylonGeo, new THREE.MeshLambertMaterial({ color: PYLON }), LIFT_N)
+  const cableGeo = new THREE.BoxGeometry(0.16, 0.16, 1)
+  cables = new THREE.InstancedMesh(cableGeo, new THREE.MeshLambertMaterial({ color: CABLE }), LIFT_N)
+  const chairGeo = new THREE.BoxGeometry(1.5, 1.1, 0.5)
+  chairGeo.translate(0, -1.4, 0)
+  chairs = new THREE.InstancedMesh(chairGeo, new THREE.MeshLambertMaterial({ color: CHAIR }), LIFT_N * 3)
+  scene.add(pylons, cables, chairs)
+
   // Portes de slalom : deux mâts et une banderole, assez hauts pour se voir de loin.
   const mat = new THREE.BoxGeometry(0.28, TUNING.GATE_H, 0.28)
   mat.translate(0, TUNING.GATE_H / 2, 0)
@@ -263,6 +281,7 @@ export function draw(state, dt) {
   updateTerrain(state)
   updateTrees(state)
   updateGates(state)
+  updateLift(state)
   updateRamps(state)
   updateFlags(state)
 
@@ -460,6 +479,51 @@ function updateFlags(state) {
   }
   flagsL.instanceMatrix.needsUpdate = true
   flagsR.instanceMatrix.needsUpdate = true
+}
+
+// Le télésiège ne bouge qu'au passage d'un pylône. Le câble est un segment tendu entre deux
+// pylônes, redressé à la bonne longueur et à la bonne pente : c'est ce qui trahit un faux.
+function updateLift(state) {
+  const row = Math.round(state.z / LIFT_GAP)
+  if (row === liftRow) return
+  liftRow = row
+  const ter = state.terrain
+  let c = 0
+  for (let i = 0; i < LIFT_N; i++) {
+    const z0 = (row + 2 - i) * LIFT_GAP
+    const y0 = ter.height(LIFT_X, z0)
+    tmpObj.position.set(LIFT_X, y0, z0)
+    tmpObj.scale.setScalar(1)
+    tmpObj.rotation.set(0, 0, 0)
+    tmpObj.updateMatrix()
+    pylons.setMatrixAt(i, tmpObj.matrix)
+
+    const z1 = z0 - LIFT_GAP
+    const y1 = ter.height(LIFT_X, z1)
+    const hautA = y0 + LIFT_H, hautB = y1 + LIFT_H
+    tmpObj.position.set(LIFT_X, (hautA + hautB) / 2, (z0 + z1) / 2)
+    tmpObj.rotation.set(Math.atan2(hautB - hautA, LIFT_GAP), 0, 0)
+    tmpObj.scale.set(1, 1, Math.hypot(LIFT_GAP, hautB - hautA))
+    tmpObj.updateMatrix()
+    cables.setMatrixAt(i, tmpObj.matrix)
+
+    // Les sièges pendent sous le câble, régulièrement, entre ces deux pylônes.
+    for (let k = 0; k < 3; k++) {
+      const t = (k + 0.5) / 3
+      const zc = z0 - LIFT_GAP * t
+      tmpObj.position.set(LIFT_X, hautA + (hautB - hautA) * t, zc)
+      tmpObj.rotation.set(0, 0, 0)
+      tmpObj.scale.setScalar(1)
+      tmpObj.updateMatrix()
+      chairs.setMatrixAt(c++, tmpObj.matrix)
+    }
+  }
+  pylons.instanceMatrix.needsUpdate = true
+  cables.instanceMatrix.needsUpdate = true
+  chairs.instanceMatrix.needsUpdate = true
+  pylons.computeBoundingSphere()
+  cables.computeBoundingSphere()
+  chairs.computeBoundingSphere()
 }
 
 // Les portes bougent peu, mais leur couleur change au passage : elles se ternissent une fois
