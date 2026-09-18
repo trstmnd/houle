@@ -76,7 +76,7 @@ export const TUNING = {
   JUMP_MID: 45,         // m : en dessous, saut moyen, au-dessus saut long
 
   // Portes
-  GATE_GAP: 140,        // m entre deux portes
+  GATE_GAP: 105,        // m entre deux portes
   GATE_W: 9,            // m entre les deux fanions
   GATE_H: 4,            // m de haut : au-dessus, on est passé par-dessus, ça ne compte pas
   GATE_VALUE: 10,       // points, avant multiplicateur
