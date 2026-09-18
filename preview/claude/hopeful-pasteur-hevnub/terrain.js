@@ -105,6 +105,8 @@ export function create(seed) {
     out.scale = 0.75 + hash(ix, iz, p[2]) * 0.9
     const edge = Math.abs(out.x) - TUNING.TRACK_HALF
     out.show = edge > 3 && hash(ix, iz, p[3]) < Math.min(1, 0.25 + edge / 60)
+    // Un sur cinq est un rocher : de la roche pour l'échelle, et ça casse la forêt uniforme.
+    out.rock = hash(ix, iz, p[2] + 11.3) < 0.2
     return out
   }
 

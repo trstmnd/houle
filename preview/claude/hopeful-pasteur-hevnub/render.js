@@ -5,18 +5,20 @@ import { TUNING, lookAt } from './physics.js'
 // Palette montagne. Le low poly ne tient que si les couleurs sont franches et peu nombreuses.
 const SKY_TOP = 0x2F7BC4, SKY_LOW = 0xCFE8F7, FOG = 0xCFE8F7
 const SNOW = 0xFFFFFF, SNOW_SHADE = 0x6E97C6, ROCK = 0x6E6357
+const STONE = 0x6A6E74, TRACK_COL = 0xB9CFE4
 const PINE = 0x27443A, TRUNK = 0x4A3524, SUN = 0xFFF6E2
 const RAMP = 0xF08A2B
 const PEAK_HI = 0xE8F2FA, PEAK_LO = 0xA9C9E2   // chaîne lointaine : blanche en haut, noyée de brume en bas
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray
+let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track
 const ramp = { x: 0, y: 0, z: 0 }
+const HIDE = -9999                    // hauteur où l'on range une instance inutilisée
 let rampFirst = NaN
 let originX = NaN, originZ = NaN      // case du réseau sur laquelle la grille est calée
 let treeRow = NaN
-const tree = { x: 0, y: 0, z: 0, scale: 1, show: false }
+const tree = { x: 0, y: 0, z: 0, scale: 1, show: false, rock: false }
 const cSnow = { r: 0, g: 0, b: 0 }, cShade = { r: 0, g: 0, b: 0 }, cRock = { r: 0, g: 0, b: 0 }
 const look = { x: 0, y: 0, z: 0 }
 const tmpObj = new THREE.Object3D()   // réutilisé pour poser les fanions, rien ne s'alloue par frame
@@ -24,12 +26,18 @@ const tmpObj = new THREE.Object3D()   // réutilisé pour poser les fanions, rie
 const NX = TUNING.GRID_NX, NZ = TUNING.GRID_NZ, CELL = TUNING.CELL
 const W = NX + 1                      // sommets par rangée
 const SPRAY_N = 260       // pool de flocons, jamais réalloué
+const TRACK_N = 90        // points de la trace, chacun deux sommets
+const TRACK_STEP = 1.3    // m entre deux points
+const TRACK_W = 0.42      // m de demi-largeur
 const SPRAY_LIFE = 0.75   // s
 const heights = new Float32Array((NX + 1) * (NZ + 1))
 const sprayPos = new Float32Array(SPRAY_N * 3)
 const sprayVel = new Float32Array(SPRAY_N * 3)
 const sprayLife = new Float32Array(SPRAY_N)
 let sprayHead = 0
+const trackPos = new Float32Array(TRACK_N * 2 * 3)
+const trackCol = new Float32Array(TRACK_N * 2 * 3)
+let trackLastX = NaN, trackLastZ = 0
 const FLAG_EVERY = 14                 // m entre deux fanions d'une rangée
 const FLAG_N = 30                     // fanions par rangée
 const TREE_LANES = 9                  // cases de part et d'autre de la piste
@@ -112,7 +120,30 @@ export function init(canvas) {
   const trunkGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.6, 5)
   trunkGeo.translate(0, 0.8, 0)
   trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: TRUNK }), TREE_N)
-  scene.add(pines, trunks)
+  const rockGeo = new THREE.IcosahedronGeometry(1.5, 0)
+  rockGeo.scale(1.15, 0.72, 1)
+  rockGeo.translate(0, 0.45, 0)
+  rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshLambertMaterial({ color: STONE, flatShading: true }), TREE_N)
+  scene.add(pines, trunks, rocks)
+
+  // Trace laissée par les skis : un ruban qui suit le skieur et s'efface vers la queue.
+  const tg = new THREE.BufferGeometry()
+  tg.setAttribute('position', new THREE.BufferAttribute(trackPos, 3))
+  tg.setAttribute('color', new THREE.BufferAttribute(trackCol, 3))
+  const idx = new Uint16Array((TRACK_N - 1) * 6)
+  for (let i = 0; i < TRACK_N - 1; i++) {
+    const a = i * 2
+    idx[i * 6] = a; idx[i * 6 + 1] = a + 1; idx[i * 6 + 2] = a + 2
+    idx[i * 6 + 3] = a + 1; idx[i * 6 + 4] = a + 3; idx[i * 6 + 5] = a + 2
+  }
+  tg.setIndex(new THREE.BufferAttribute(idx, 1))
+  tg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
+  track = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.34, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide,
+  }))
+  track.frustumCulled = false
+  scene.add(track)
 
   // Gerbe de neige : un pool de points, la seule chose qui dise que la neige est de la neige.
   const sg = new THREE.BufferGeometry()
@@ -123,6 +154,18 @@ export function init(canvas) {
   }))
   spray.frustumCulled = false
   scene.add(spray)
+
+  // La trace s'efface vers la queue : dégradé figé une fois, du bleu de neige tassée vers le blanc.
+  const tc = new THREE.Color(TRACK_COL), sn = new THREE.Color(SNOW)
+  for (let i = 0; i < TRACK_N; i++) {
+    const t = 1 - i / (TRACK_N - 1)   // 1 sous les skis, 0 à la queue : la trace s'efface derrière
+    for (let k = 0; k < 2; k++) {
+      const c = (i * 2 + k) * 3
+      trackCol[c] = sn.r + (tc.r - sn.r) * (1 - t)
+      trackCol[c + 1] = sn.g + (tc.g - sn.g) * (1 - t)
+      trackCol[c + 2] = sn.b + (tc.b - sn.b) * (1 - t)
+    }
+  }
 
   // Balises de tremplin : on doit le voir venir pour viser, sinon le saut est subi.
   const postGeo = new THREE.BoxGeometry(0.5, 3.2, 0.5)
@@ -214,7 +257,9 @@ export function draw(state, dt) {
   skier.rotation.y = -state.heading
   // Inclinaison dans le virage, et le corps se plie quand ça va vite.
   skierBody.rotation.z = state.lean * 0.55
-  skierBody.rotation.x = 0.12 + 0.25 * (state.s / TUNING.MAX_SPEED) + (state.wipe > 0 ? 0.9 : 0)
+  // On se ramasse en chargeant : c'est le seul retour visuel de la détente à venir.
+  skierBody.rotation.x = 0.12 + 0.25 * (state.s / TUNING.MAX_SPEED) + state.charge * 0.32 + (state.wipe > 0 ? 0.9 : 0)
+  skierBody.position.y = -0.2 * state.charge
 
   // L'ombre reste au sol et s'estompe avec la hauteur : c'est elle qui dit où on va retomber.
   const gy = state.terrain.height(state.x, state.z)
@@ -234,6 +279,7 @@ export function draw(state, dt) {
     camera.updateProjectionMatrix()
   }
 
+  updateTrack(state)
   updateSpray(state, dt)
   sky.position.copy(camera.position)   // le ciel suit la caméra, sinon on en sort
   peaks.position.set(camera.position.x, state.y - 34, camera.position.z)
@@ -363,25 +409,27 @@ function updateTrees(state) {
   for (let li = -TREE_LANES; li <= TREE_LANES; li++) {
     for (let r = 0; r < TREE_ROWS; r++) {
       ter.tree(li, row + 3 - r, tree)
-      if (tree.show) {
-        tmpObj.position.set(tree.x, tree.y, tree.z)
-        tmpObj.scale.setScalar(tree.scale)
-        tmpObj.rotation.y = tree.x * 0.7
-      } else {
-        tmpObj.position.set(0, -9999, 0)   // rangé sous la montagne plutôt que retiré du pool
-        tmpObj.scale.setScalar(1)
-        tmpObj.rotation.y = 0
-      }
+      const estRocher = tree.show && tree.rock
+      const estSapin = tree.show && !tree.rock
+      tmpObj.position.set(tree.x, estSapin ? tree.y : HIDE, tree.z)
+      tmpObj.scale.setScalar(tree.scale)
+      tmpObj.rotation.y = tree.x * 0.7
       tmpObj.updateMatrix()
       pines.setMatrixAt(n, tmpObj.matrix)
       trunks.setMatrixAt(n, tmpObj.matrix)
+      tmpObj.position.y = estRocher ? tree.y - 0.3 : HIDE
+      tmpObj.scale.setScalar(0.6 + tree.scale * 0.55)
+      tmpObj.updateMatrix()
+      rocks.setMatrixAt(n, tmpObj.matrix)
       n++
     }
   }
   pines.instanceMatrix.needsUpdate = true
   trunks.instanceMatrix.needsUpdate = true
+  rocks.instanceMatrix.needsUpdate = true
   pines.computeBoundingSphere()
   trunks.computeBoundingSphere()
+  rocks.computeBoundingSphere()
 }
 
 // Deux rangées de piquets qui bordent la piste : c'est là que se lit la vitesse.
@@ -417,6 +465,36 @@ function updateRamps(state) {
   }
   ramps.instanceMatrix.needsUpdate = true
   ramps.computeBoundingSphere()
+}
+
+// La trace : un point tous les 1,3 m au sol. Le ruban glisse d'un point, comme la grille du terrain.
+function updateTrack(state) {
+  if (!state.grounded) return
+  const dx = state.x - trackLastX, dz = state.z - trackLastZ
+  const d2 = dx * dx + dz * dz
+  if (!Number.isNaN(trackLastX) && d2 < TRACK_STEP * TRACK_STEP) return
+
+  const nx = Math.cos(state.heading) * TRACK_W   // perpendiculaire au cap, dans le plan du sol
+  const nz = Math.sin(state.heading) * TRACK_W
+  const y = state.y + 0.05
+
+  // Après un saut ou une téléportation, on replie toute la trace sur place : sinon elle traverse
+  // le décor en une bande rectiligne.
+  if (Number.isNaN(trackLastX) || d2 > 36) {
+    for (let i = 0; i < TRACK_N * 2; i++) {
+      trackPos[i * 3] = state.x + (i % 2 ? nx : -nx)
+      trackPos[i * 3 + 1] = y
+      trackPos[i * 3 + 2] = state.z + (i % 2 ? nz : -nz)
+    }
+  } else {
+    trackPos.copyWithin(0, 6)
+    const b = (TRACK_N - 1) * 6
+    trackPos[b] = state.x - nx; trackPos[b + 1] = y; trackPos[b + 2] = state.z - nz
+    trackPos[b + 3] = state.x + nx; trackPos[b + 4] = y; trackPos[b + 5] = state.z + nz
+  }
+  trackLastX = state.x
+  trackLastZ = state.z
+  track.geometry.attributes.position.needsUpdate = true
 }
 
 // Un flocon repris dans le pool, le plus vieux d'abord. Rien ne s'alloue.

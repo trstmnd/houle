@@ -152,6 +152,23 @@ html, body {
 .pad em { font-style: normal; font-size: 12px; font-weight: 800; opacity: 0.55; }
 .pad.on { background: var(--accent); color: var(--paper); transform: scale(0.96); }
 
+/* La touche de saut est au centre : les deux pouces la trouvent, et elle porte sa jauge. */
+.pad-jump { width: 96px; height: 96px; align-self: flex-end; position: relative; }
+.pad-jump svg { width: 34px; height: 34px; }
+.gauge {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 11px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(22, 36, 46, 0.14);
+  overflow: hidden;
+}
+.pad-jump.on .gauge { background: rgba(255, 255, 255, 0.35); }
+.gauge s { display: block; height: 100%; width: 0; background: var(--accent); text-decoration: none; }
+.pad-jump.on .gauge s { background: var(--paper); }
+
 /* Didacticiel : une phrase à la fois, sous le compteur, qui s'efface dès que le geste est fait. */
 #tuto {
   position: fixed;
