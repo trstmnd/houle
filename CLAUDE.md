@@ -30,9 +30,10 @@ Après chaque push, ta réponse tient en 5 lignes : ce qui a changé, l'URL, ce 
 
 ## Pipeline
 
-- Push sur une branche → Actions → `check.sh` → déploiement de `game/` sur `https://trstmnd.github.io/houle/preview/<branche>/` en ~60 s.
-- Push sur `main` → `https://trstmnd.github.io/houle/`.
-- Tu donnes l'URL telle quelle, avec le nom exact de ta branche. Si le run Actions est rouge, rien n'est déployé : lis le log, corrige, repousse.
+- **Le jeu est servi par GitHub Pages depuis la branche `main`** : https://trstmnd.github.io/houle/ (la racine redirige vers `game/` en gardant `?seed=`). Un push sur `main` redéploie en ~60 s.
+- **Pousse sur `main` directement pendant le week-end**, un commit par bloc. Si le push sur `main` t'est refusé, pousse ta branche et ouvre une PR : Tristan la fusionne depuis l'app GitHub en un tap, le déploiement suit.
+- Après chaque push, donne l'URL https://trstmnd.github.io/houle/ et dis-lui de recharger. Pas de cache à craindre : Pages sert les fichiers tels quels.
+- Preview par branche (`preview/<branche>/`, workflow `.github/workflows/pages.yml`) : **pas encore active**, elle attend le scope `workflow` sur le jeton de Tristan. Quand elle l'est, `CLAUDE.md` et `SPEC.md` §12 le disent et l'URL de preview remplace le push sur `main`.
 - Session sur le Mac (tu as un navigateur) : `.claude/launch.json` lance `python3 -m http.server 8000 --directory game`. Teste toi-même avant de pousser. `file://` ne charge pas les modules ES.
 - Session cloud (pas de navigateur) : `check.sh` puis push puis URL. Tu ne peux pas voir le jeu, Tristan le voit pour toi.
 
