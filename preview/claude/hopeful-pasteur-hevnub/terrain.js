@@ -67,5 +67,24 @@ export function create(seed) {
     return out
   }
 
-  return { sample, seed }
+  // Hash déterministe d'une case du réseau : pose les arbres sans état ni Math.random.
+  function hash(a, b, salt) {
+    const v = Math.sin(a * 127.1 + b * 311.7 + salt) * 43758.5453
+    return v - Math.floor(v)
+  }
+
+  // Arbre de la case (ix, iz) : position, hauteur, et s'il a le droit d'exister.
+  // Ils ne poussent que hors piste : ce sont eux qui bordent le couloir, mieux que des fanions.
+  function tree(ix, iz, out) {
+    const g = TUNING.TREE_GAP
+    out.x = ix * g + (hash(ix, iz, p[0]) - 0.5) * g * 0.8
+    out.z = iz * g + (hash(ix, iz, p[1]) - 0.5) * g * 0.8
+    out.y = sample(out.x, out.z).y
+    out.scale = 0.75 + hash(ix, iz, p[2]) * 0.9
+    const edge = Math.abs(out.x) - TUNING.TRACK_HALF
+    out.show = edge > 3 && hash(ix, iz, p[3]) < Math.min(1, 0.25 + edge / 60)
+    return out
+  }
+
+  return { sample, tree, seed }
 }
