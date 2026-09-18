@@ -57,7 +57,11 @@ for (const [x, z] of [[r.x, r.z + 4], [r.x + 3, r.z - 2]]) {
   const nzz = (t1.sample(x, z + e).y - 2 * y0 + t1.sample(x, z - e).y) / (e * e)
   assert.ok(Math.abs(azz - nzz) < 1e-2, `hzz faux sur un tremplin : ${azz} contre ${nzz}`)
 }
-assert.ok(t1.sample(r.x, r.z).y - t1.sample(r.x + 40, r.z).y > 1, 'le tremplin ne dépasse pas du terrain')
+// Ce qui compte pour un tremplin, ce n'est pas d'être plus haut que ses voisins, c'est d'être un
+// dôme : la courbure le long de la descente doit être franchement négative, sinon le critère de
+// décollage ne le voit pas. Comparer deux hauteurs ne marche plus depuis que la piste est en cuvette.
+const courbure = t1.sample(r.x, r.z).hzz
+assert.ok(courbure < -0.04, `le tremplin n'est pas un dôme : hzz = ${courbure.toFixed(4)}`)
 
 // physique : 20 s de pas fixes, la carre bouge, rien ne part en NaN ni sous la neige
 const st = createState(123456)

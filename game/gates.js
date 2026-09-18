@@ -18,13 +18,15 @@ function place(state, n, out) {
   const T = TUNING
   const ter = state.terrain
   const h = frac(Math.sin(n * 91.7 + state.seed * 0.013) * 43758.5453)
-  const marge = T.TRACK_HALF - T.GATE_W
+  // Depuis que la piste est en cuvette, une porte au bord coûte cher à aller chercher : on les
+  // resserre autour de l'axe pour qu'elles restent un choix, pas une punition.
+  const marge = (T.TRACK_HALF - T.GATE_W) * 0.55
   let z = -n * T.GATE_GAP
   const proche = Math.round(-z / T.JUMP_GAP)
   const zRamp = -proche * T.JUMP_GAP
   if (Math.abs(z - zRamp) < T.JUMP_WZ * 2) z -= T.JUMP_WZ * 2.5   // pas sur la table du tremplin
   out.n = n
-  out.x = (h * 2 - 1) * marge
+  out.x = ter.centre(z) + (h * 2 - 1) * marge
   out.z = z
   out.y = ter.height(out.x, out.z)
   out.passed = false

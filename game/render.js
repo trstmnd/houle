@@ -55,7 +55,7 @@ const FLAG_N = 30                     // fanions par rangée
 const TREE_LANES = 9                  // cases de part et d'autre de la piste
 const TREE_ROWS = 26                  // cases devant le skieur
 const TREE_N = (2 * TREE_LANES + 1) * TREE_ROWS
-const LIFT_X = -82                    // m, le télésiège longe la piste, hors du couloir
+const LIFT_X = -82                    // m, décalage du télésiège par rapport à l'axe de la piste
 const LIFT_GAP = 62                   // m entre deux pylônes
 const LIFT_N = 8                      // pylônes visibles à la fois
 const LIFT_H = 13                     // m de haut
@@ -394,7 +394,7 @@ function updateTerrain(state) {
     originZ = oz
   }
   terrainMesh.position.set(ox, 0, oz)
-  writeGrid()
+  writeGrid(state.terrain)
 }
 
 function worldX(ix) { return originX + ix * CELL - NX * CELL * 0.5 }
@@ -437,7 +437,7 @@ function rollX(state, dir) {
 
 // Hauteurs et couleurs versées dans la géométrie. La pente vient de la grille elle-même,
 // par différence finie : les dérivées analytiques ne servent à rien pour colorier.
-function writeGrid() {
+function writeGrid(ter) {
   const pos = posAttr.array, col = colAttr.array
   const inv2 = 1 / (2 * CELL)
   for (let iz = 0; iz <= NZ; iz++) {
@@ -458,7 +458,7 @@ function writeGrid() {
       // Damée au milieu, tassée sur les bords : la piste doit se lire sans fanion.
       const wx = originX + ix * CELL - NX * CELL * 0.5
       const wz = originZ + iz * CELL - NZ * CELL * 0.5
-      const hors = Math.abs(wx) - TUNING.TRACK_HALF
+      const hors = Math.abs(wx - ter.centre(wz)) - TUNING.TRACK_HALF
       const damee = hors < 0 ? 1 : (hors < 5 ? 1 - hors / 5 : 0)
       const steep = Math.sqrt(hx * hx + dz * dz)
       let rock = (steep - 0.7) / 0.45
@@ -521,10 +521,11 @@ function updateFlags(state) {
   const ter = state.terrain
   for (let i = 0; i < FLAG_N; i++) {
     const z = base - i * FLAG_EVERY
-    tmpObj.position.set(-TUNING.TRACK_HALF, ter.sample(-TUNING.TRACK_HALF, z).y, z)
+    const axe = ter.centre(z)
+    tmpObj.position.set(axe - TUNING.TRACK_HALF, ter.height(axe - TUNING.TRACK_HALF, z), z)
     tmpObj.updateMatrix()
     flagsL.setMatrixAt(i, tmpObj.matrix)
-    tmpObj.position.set(TUNING.TRACK_HALF, ter.sample(TUNING.TRACK_HALF, z).y, z)
+    tmpObj.position.set(axe + TUNING.TRACK_HALF, ter.height(axe + TUNING.TRACK_HALF, z), z)
     tmpObj.updateMatrix()
     flagsR.setMatrixAt(i, tmpObj.matrix)
   }
@@ -542,17 +543,19 @@ function updateLift(state) {
   let c = 0
   for (let i = 0; i < LIFT_N; i++) {
     const z0 = (row + 2 - i) * LIFT_GAP
-    const y0 = ter.height(LIFT_X, z0)
-    tmpObj.position.set(LIFT_X, y0, z0)
+    const lx0 = ter.centre(z0) + LIFT_X
+    const y0 = ter.height(lx0, z0)
+    tmpObj.position.set(lx0, y0, z0)
     tmpObj.scale.setScalar(1)
     tmpObj.rotation.set(0, 0, 0)
     tmpObj.updateMatrix()
     pylons.setMatrixAt(i, tmpObj.matrix)
 
     const z1 = z0 - LIFT_GAP
-    const y1 = ter.height(LIFT_X, z1)
+    const lx1 = ter.centre(z1) + LIFT_X
+    const y1 = ter.height(lx1, z1)
     const hautA = y0 + LIFT_H, hautB = y1 + LIFT_H
-    tmpObj.position.set(LIFT_X, (hautA + hautB) / 2, (z0 + z1) / 2)
+    tmpObj.position.set((lx0 + lx1) / 2, (hautA + hautB) / 2, (z0 + z1) / 2)
     tmpObj.rotation.set(Math.atan2(hautB - hautA, LIFT_GAP), 0, 0)
     tmpObj.scale.set(1, 1, Math.hypot(LIFT_GAP, hautB - hautA))
     tmpObj.updateMatrix()
@@ -562,7 +565,7 @@ function updateLift(state) {
     for (let k = 0; k < 3; k++) {
       const t = (k + 0.5) / 3
       const zc = z0 - LIFT_GAP * t
-      tmpObj.position.set(LIFT_X, hautA + (hautB - hautA) * t, zc)
+      tmpObj.position.set(lx0 + (lx1 - lx0) * t, hautA + (hautB - hautA) * t, zc)
       tmpObj.rotation.set(0, 0, 0)
       tmpObj.scale.setScalar(1)
       tmpObj.updateMatrix()

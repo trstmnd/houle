@@ -22,6 +22,19 @@ export function create(seed) {
   const mz = 2 * Math.PI / T.MOG_Z
   const f = 2 * Math.PI / T.MOG_BAND        // alternance lisse / champ de bosses
 
+  // Axe de la piste : deux lacets superposés. Tout ce qui borde la piste s'y accroche, et le
+  // rappel de cap vise sa tangente, pas la ligne de plus grande pente.
+  const kb1 = 2 * Math.PI / T.TRACK_LEN1, kb2 = 2 * Math.PI / T.TRACK_LEN2
+  function centre(z) {
+    return T.TRACK_BEND1 * Math.sin(kb1 * z + p[0]) + T.TRACK_BEND2 * Math.sin(kb2 * z + p[3])
+  }
+  function centreSlope(z) {
+    return T.TRACK_BEND1 * kb1 * Math.cos(kb1 * z + p[0]) + T.TRACK_BEND2 * kb2 * Math.cos(kb2 * z + p[3])
+  }
+  function centreCurve(z) {
+    return -T.TRACK_BEND1 * kb1 * kb1 * Math.sin(kb1 * z + p[0]) - T.TRACK_BEND2 * kb2 * kb2 * Math.sin(kb2 * z + p[3])
+  }
+
   const out = { y: 0, hx: 0, hz: 0, hxx: 0, hxz: 0, hzz: 0 }
 
   // Tremplin le plus proche, mis en cache : sample est appelé des milliers de fois par frame.
@@ -30,7 +43,7 @@ export function create(seed) {
     if (n === rampN) return
     rampN = n
     rampZ = -n * T.JUMP_GAP
-    rampX = (hash(n, 7, p[4]) - 0.5) * T.TRACK_HALF
+    rampX = centre(rampZ) + (hash(n, 7, p[4]) - 0.5) * T.TRACK_HALF
   }
 
   function sample(x, z) {
@@ -47,6 +60,16 @@ export function create(seed) {
     const dA = T.MOG_AMP * 0.5 * f * fc
     const ddA = -T.MOG_AMP * 0.5 * f * f * fs
 
+    // La cuvette : les bords remontent puis s'aplatissent. Une parabole creuserait un canyon de
+    // 90 m à 150 m de l'axe ; celle-ci plafonne à BANK_H et reste dérivable partout.
+    const cz = centre(z), cs = centreSlope(z), cc = centreCurve(z)
+    const bx = x - cz
+    const bw2 = T.BANK_W * T.BANK_W
+    const bE = Math.exp(-bx * bx / bw2)
+    const bank = T.BANK_H * (1 - bE)
+    const b1 = T.BANK_H * bE * 2 * bx / bw2                       // pente de la cuvette
+    const b2 = T.BANK_H * bE * (2 / bw2 - 4 * bx * bx / (bw2 * bw2))
+
     // Le tremplin : une bosse gaussienne, dérivable partout, donc le critère de décollage la voit.
     ramp(Math.round(-z / T.JUMP_GAP))
     const rx = x - rampX, rz = z - rampZ
@@ -60,31 +83,37 @@ export function create(seed) {
       + T.R3 * s3 * s4
       + A * S * Tz
       + e
+      + bank
 
     out.hx = T.R1 * a * c1
       + T.R3 * c * c3 * s4
       + A * mx * C * Tz
       + e * ex
+      + b1
 
     out.hz = T.SLOPE
       + T.R2 * b * c2
       + T.R3 * d * s3 * c4
       + (dA * Tz + A * mz * Cz) * S
       + e * ez
+      - b1 * cs
 
     out.hxx = -T.R1 * a * a * s1
       - T.R3 * c * c * s3 * s4
       - A * mx * mx * S * Tz
       + e * (ex * ex - 2 / wx2)
+      + b2
 
     out.hxz = T.R3 * c * d * c3 * c4
       + (dA * Tz + A * mz * Cz) * mx * C
       + e * ex * ez
+      - b2 * cs
 
     out.hzz = -T.R2 * b * b * s2
       - T.R3 * d * d * s3 * s4
       + (ddA * Tz + 2 * dA * mz * Cz - A * mz * mz * Tz) * S
       + e * (ez * ez - 2 / wz2)
+      + b2 * cs * cs - b1 * cc
 
     return out
   }
@@ -103,7 +132,7 @@ export function create(seed) {
     out.z = iz * g + (hash(ix, iz, p[1]) - 0.5) * g * 0.8
     out.y = sample(out.x, out.z).y
     out.scale = 0.75 + hash(ix, iz, p[2]) * 0.9
-    const edge = Math.abs(out.x) - TUNING.TRACK_HALF
+    const edge = Math.abs(out.x - centre(out.z)) - TUNING.TRACK_HALF
     out.show = edge > 3 && hash(ix, iz, p[3]) < Math.min(1, 0.25 + edge / 60)
     // Un sur cinq est un rocher : de la roche pour l'échelle, et ça casse la forêt uniforme.
     out.rock = hash(ix, iz, p[2] + 11.3) < 0.2
@@ -117,7 +146,9 @@ export function create(seed) {
     const rx = x - rampX, rz = z - rampZ
     const u = rx * rx / (T.JUMP_WX * T.JUMP_WX) + rz * rz / (T.JUMP_WZ * T.JUMP_WZ)
     const e = u > 9 ? 0 : T.JUMP_AMP * Math.exp(-u)     // au-delà de 3 sigmas le tremplin ne vaut rien
+    const bx = x - centre(z)
     return T.SLOPE * z
+      + T.BANK_H * (1 - Math.exp(-bx * bx / (T.BANK_W * T.BANK_W)))
       + T.R1 * Math.sin(a * x + p[0])
       + T.R2 * Math.sin(b * z + p[1])
       + T.R3 * Math.sin(c * x + p[2]) * Math.sin(d * z + p[3])
@@ -134,5 +165,5 @@ export function create(seed) {
     return out2
   }
 
-  return { sample, height, tree, jump, seed }
+  return { sample, height, tree, jump, centre, centreSlope, seed }
 }
