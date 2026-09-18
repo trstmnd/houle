@@ -1,4 +1,4 @@
-# Houle : consignes pour l'agent qui code
+# Ski 3000 : consignes pour l'agent qui code
 
 Tu codes un mini-jeu web en un week-end pour Tristan, qui te pilote souvent depuis son téléphone. **Lis `SPEC.md` en entier avant la première ligne de code.** `LATER.md` est la liste de ce qu'on ne code pas. Ce fichier dit comment travailler, la spec dit quoi construire.
 
@@ -17,15 +17,15 @@ Après chaque push, ta réponse tient en 5 lignes : ce qui a changé, l'URL, ce 
 
 ## Règles de code, non négociables
 
-1. **`physics.js`, `terrain.js`, `rings.js`, `rng.js` sont purs** : aucun `document`, `window`, `canvas`, `performance`, `Date`, `Math.random`. Tout ce que le rendu dessine vient de `state`. `check.sh` les importe dans Node.
+1. **`physics.js`, `terrain.js`, `gates.js`, `rng.js` sont purs** : jamais de `three` non plus, : aucun `document`, `window`, `canvas`, `performance`, `Date`, `Math.random`. Tout ce que le rendu dessine vient de `state`. `check.sh` les importe dans Node.
 2. **`render.js` et `audio.js` lisent `state` et n'y écrivent jamais.** Ils réagissent à `state.events`.
 3. **Toute constante de feel vit dans `TUNING`** (`physics.js`). Un nombre magique dans une fonction de physique ou de rendu est un bug.
-4. **Zéro dépendance, zéro build, zéro asset, zéro police.** `npm install` n'existe pas dans ce projet. Aucun fichier binaire dans le dépôt.
+4. **Une seule dépendance : `three`, chargée par `importmap` depuis `cdn.jsdelivr.net`.** Elle n'est pas dans le dépôt et `npm install` n'existe toujours pas. Zéro build, zéro asset, zéro police, aucun fichier binaire. Le jeu ne marche pas hors ligne, c'est assumé.
 5. **Pas d'allocation dans la boucle** : pools pré-alloués pour anneaux, particules, étiquettes, traînée. Pas de `map`/`filter` par frame, pas d'objets créés dans `step` ni dans `draw`.
 6. **`sh check.sh` vert avant chaque push.** En modules ES sans build, une faute de syntaxe donne une page blanche sur le téléphone, sans aucun message. C'est le piège numéro 1 de ce projet.
 7. **Un fichier à la fois, un commit par bloc**, message en français au présent (« terrain seedé et dérivées analytiques »). Fin de message : `Co-Authored-By` avec ton modèle.
 8. **Pas de tests au-delà de `check.sh`.** Le test, c'est le pouce de Tristan sur l'URL de preview.
-9. **Ne recrée jamais `index.html`, `style.css`, `rng.js`** : ils sont écrits, tu les modifies.
+9. **Ne recrée jamais `index.html`, `style.css`, `rng.js`** : ils sont écrits, tu les modifies. L'`importmap` de `index.html` fixe la version de `three`.
 10. **Le pas fixe et le `dt` borné** (`SPEC.md` §4) ne se contournent pas, même « juste pour tester ».
 
 ## Pipeline
@@ -45,7 +45,10 @@ Français dans les commentaires, les commits et les messages. Identifiants en an
 
 Une ligne par session, tenue à jour par l'agent à chaque push. C'est ce que lit la session suivante.
 
-- Session 1 (samedi 19/09 matin) : bloc 1 fait (terrain.js : sample, crests, inflectionBefore). Blocs 2 à 4 à faire
-- Session 2 (samedi 19/09 après-midi) : à faire
-- Session 3 (dimanche 20/09 matin) : à faire
-- Session 4 (dimanche 20/09 après-midi) : à faire
+Le jeu a pivoté le 18/09 : la descente 2D de dunes (spec v2) est abandonnée, on code un ski 3D (`SPEC.md` v3). L'ancienne version vit dans `attic/SPEC-2d.md` et dans la PR 1.
+
+- Bloc 1, glisser : fait, et réglé. STICK colle le skieur au sol, la piste fait 45 m de demi-largeur, les bosses sont écartées à 13 m. Tout droit 1243 m à 75 km/h, en virages tenus 802 m à 48 km/h
+- Bloc 2, chuter et compter : fait. Chrono 60 s avec la règle du dernier saut, écrans title et fin, records en localStorage, HUD vitesse et distance, grosses touches à l'écran, didacticiel en 4 étapes
+- Bloc 2 bis, tremplins : fait. Bosse gaussienne dans le terrain, balisée par deux piquets orange, longueur du saut mesurée et annoncée, trois sons selon la longueur, souffle du vent
+- Bloc 3, les portes : à faire. `gates.js` n'existe pas encore
+- Bloc 4, l'habillage : partiellement fait (sapins, ciel, sons). Restent les gerbes de neige, le partage testé sur téléphone, la mise en ligne sur `main`

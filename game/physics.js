@@ -1,67 +1,94 @@
-// Physique du jeu. PUR : aucun document, window, canvas, performance, Date, Math.random.
-// Tout le game feel vit dans TUNING. Voir SPEC.md §3, §4, §10.
+// Physique du ski. PUR : aucun three, document, window, performance, Date, Math.random.
+// Mètres et secondes. Tout le feel vit dans TUNING. Voir SPEC.md §5, §9.
 import * as terrain from './terrain.js'
 
 export const STEP = 1 / 120
 
 export const TUNING = {
-  // Feel
-  GRAVITY: 1000,        // u/s², sol et vol
-  PRESS_MULT: 2.2,      // gravité doigt posé au sol
-  MAX_SPEED: 1200,      // u/s, borne aussi la portée des sauts (lisibilité, SPEC §6)
-  MIN_SPEED: 180,       // u/s, jamais arrêté
-  START_SPEED: 420,
-  CRASH_SPEED: 260,
-  CRASH_STUN: 0.4,      // s, input ignoré
-  CRASH_SPIN: 14,       // rad/s, culbute visuelle
-  FRICTION: 0.28,       // /s, proportionnel à la vitesse
-  ROT_SPEED: 5.5,       // rad/s, backflip doigt posé en vol
-  AIR_TIME_SCALE: 0.82, // ralenti en vol
-  ALIGN_RATE: 6,        // /s, alignement sur la trajectoire doigt levé
-  ALIGN_ZONE: 1.2,      // rad, au-delà un flip lâché reste à l'envers
-  TAKEOFF_GRACE: 0.05,  // s sans test de contact après décollage
-  LAND_PERFECT: 0.26,   // rad (≈ 15°)
-  LAND_FAIL: 0.70,      // rad (≈ 40°)
-  LAND_LOSS: 0.45,      // perte max sur réception correcte
-  PERFECT_BOOST: 1.12,
-  FLIP_BOOST: 1.06,     // par flip complet rentré parfait
-  WIND_MAX: 140,        // u/s²
-  RUN_TIME: 60,         // s
-  INPUT_LOCK: 0.3,      // s après un changement d'écran
+  // Glisse
+  G: 9.81,
+  SLOPE: 0.37,          // pente moyenne, 20°
+  MAX_SPEED: 45,        // m/s
+  MIN_SPEED: 2,
+  START_SPEED: 12,
+  TURN_RATE: 1.1,       // rad/s à pleine carre
+  FALL_ALIGN: 1.4,      // /s, rappel du cap vers l axe de la piste quand la carre est lâchée
+  EDGE_DRAG: 0.45,      // /s à steer = 1 : virer coûte, c'est tout l'arbitrage du jeu
+  FRICTION: 0.06,       // /s, neige damée
+  AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
+  DEEP_DRAG: 0.4,       // /s hors piste : un coût, pas un mur
+  TRACK_HALF: 45,       // m, demi-largeur : plus étroit, un virage tenu sort de la piste en 5 s
+
+  // Vol et réception
+  STICK: 3.2,           // combien de g les jambes encaissent avant que le sol lâche : sans ce terme,
+                        // la moindre bosse catapulte, un skieur absorbe et reste collé
+  // Saut à la Dune : maintenir plaque le skieur dans la courbe et charge, lâcher détend.
+  PRESS_MULT: 1.9,      // gravité multipliée tant qu'on maintient : on plonge dans la pente
+  PRESS_STICK: 3.0,     // et on ne décolle pas tout seul, même sur une bosse : on attend la lèvre
+  JUMP_POP: 6.2,        // m/s vers le haut à pleine charge
+  JUMP_MIN: 0.3,        // fraction du pop sans charge : un petit saut reste possible
+  JUMP_CHARGE: 0.5,     // s pour charger à fond
+  AIR_STEER: 0.6,       // le cap répond moins bien en l'air qu'au sol
+  TAKEOFF_GRACE: 0.06,  // s sans test de contact après le décollage
+  LAND_PERFECT: 0.22,   // rad
+  LAND_FAIL: 0.62,      // rad
+  LAND_LOSS: 0.5,
+  LAND_BOOST: 1.04,
+  WIPE_SPEED: 6,        // m/s après une chute
+  WIPE_TIME: 1.5,       // s sans contrôle
+
+  // Input
+  STEER_SPAN: 90,       // px de glissement pour aller de 0 à 1
+  STEER_RETURN: 0.25,   // s pour revenir à 0 doigt levé
+  KEY_RAMP: 0.18,       // s pour monter à 1 au clavier
+
+  RUN_TIME: 60,
 
   // Terrain
-  HILL_BASE: 170,       // u
-  HILL_WAVE: 1300,      // u
-  OCT_AMP: [1, 0.26, 0.07],
-  OCT_WAVE: [1, 0.43, 0.18],
-  MOD_DEPTH: 0.3,
-  MOD_WAVE: 7.3,        // en longueurs d'onde de l'octave
-  SLOPE_AVG: 0.12,      // ≈ 7°
+  WAVE_X: 70,           // m, houle latérale
+  WAVE_Z: 46,           // m, rouleaux en travers : ce sont eux qui décollent
+  WAVE_BIG_X: 190,
+  WAVE_BIG_Z: 260,
+  MOG_X: 13,             // m, pas des bosses
+  MOG_Z: 16,
+  MOG_BAND: 220,        // m, alternance lisse / bosselé
+  R1: 2.2,
+  R2: 2.0,
+  R3: 5.0,
+  MOG_AMP: 0.85,
 
-  // Anneaux
-  RING_R: 34,
-  RING_EASY_SPEED: 0.55,
-  RING_HARD_SPEED: 0.85,
-  RING_EASY_VALUE: 10,
-  RING_HARD_VALUE: 30,
+  // Tremplins : posés sur la piste, ils sont dans le terrain, donc la physique les gère toute seule.
+  JUMP_GAP: 210,        // m entre deux tremplins
+  JUMP_AMP: 2.8,        // m de haut
+  JUMP_WX: 7,           // m de demi-largeur
+  JUMP_WZ: 9,           // m de demi-longueur
+  JUMP_SHORT: 18,       // m : en dessous, saut court
+  JUMP_MID: 45,         // m : en dessous, saut moyen, au-dessus saut long
+
+  // Portes (bloc 3)
+  GATE_GAP: 140,
+  GATE_W: 9,
   MULT_TABLE: [1, 2, 3, 5, 8],
-  RING_POOL: 64,
-  RING_LOOKAHEAD: 3000,
 
-  // Caméra et effets (lus par render.js, réglés ici pour n'avoir qu'un endroit)
-  VIEW_H: 800,
-  CAM_ANCHOR: [0.35, 0.55],
-  CAM_RATE_X: 8,
-  CAM_RATE_Y: 4,
-  CAM_LOOK_Y: 0.2,
-  LOOK_AHEAD: 160,
-  ZOOM_MAX: 0.35,
-  ZOOM_RATE: 3,
-  TRAIL_LEN: 24,
-  SHAKE_PERFECT: 4,
-  SHAKE_CRASH: 14,
-  SHAKE_DECAY: 12,
+  // Caméra et rendu, lus par render.js
+  CAM_CLEAR: 1.8,       // m au-dessus de la neige : sous ce seuil la caméra traverse le sol
+                        // et on voit le ciel à travers, les faces arrière n'étant pas dessinées
+  CAM_BACK: 8.5,
+  CAM_UP: 3.6,
+  CAM_RATE: 6,          // /s, lissage
+  CAM_LOOK: 20,         // m devant le skieur
+  FOV_BASE: 62,
+  FOV_FAST: 88,
+  FOV_RATE: 2.5,
+  TREE_GAP: 16,         // m entre deux arbres du réseau
+  GRID_NX: 112,
+  GRID_NZ: 168,
+  CELL: 2.4,            // m entre deux sommets du maillage : 5 sommets par bosse, sinon c'est de la bouillie
+  FOG_NEAR: 130,
+  FOG_FAR: 330,
 }
+
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
 
 /** Ramène un angle dans ]-π, π]. */
 export function wrapAngle(a) {
@@ -70,50 +97,222 @@ export function wrapAngle(a) {
   return a - Math.PI
 }
 
-/** Critère centripète : sur une bosse (ddy > 0), le sol ne peut que pousser. Partagé avec rings.js. */
-export function canTakeOff(s, dy, ddy) {
-  if (ddy <= 0) return false
-  const kappa = ddy / Math.pow(1 + dy * dy, 1.5)
-  const cosTheta = 1 / Math.sqrt(1 + dy * dy)
-  return s * s * kappa > TUNING.GRAVITY * cosTheta
-}
-
-/** État initial d'une run. SPEC.md §3 « L'objet state ». */
+/** État initial d'une run. */
 export function createState(seed) {
-  const t = terrain.create(seed)
-  const ground = t.sample(0)
+  const ter = terrain.create(seed)
+  const g = ter.sample(0, 0)
   return {
     phase: 'title',
-    seed, terrain: t, wind: t.wind,
+    seed, terrain: ter,
     t: 0, ending: false,
-    x: 0, y: ground.y, vx: 0, vy: 0,
+    x: 0, y: g.y, z: 0,
+    vx: 0, vy: 0, vz: 0,
     s: TUNING.START_SPEED,
-    angle: Math.atan2(ground.dy, 1),
-    grounded: true, pressed: false,
-    airTime: 0, flightRings: 0, stun: 0, charge: 0,
-    score: 0, chain: 0, mult: 1, best: 0,
-    rings: [], ringsUpto: 0,
+    heading: 0,                    // 0 = plein dans la pente, positif vers +X
+    steer: 0,                      // -1 à 1, ce que dit le doigt
+    lean: 0,                       // inclinaison lissée du skieur, pour le rendu
+    grounded: true,
+    airTime: 0,
+    press: false, wasPress: false, charge: 0,
+    jumpX: 0, jumpZ: 0, lastJump: 0, bestJump: 0,
+    wipe: 0,                       // temps de chute restant
+    dist: 0,                       // mètres descendus
+    score: 0, chain: 0, mult: 1,
+    gates: [], gatesUpto: 0,
     events: [],
-    lastLanding: { quality: '', diff: 0, flips: 0 },
-    cam: { x: 0, y: ground.y, zoom: 1 },
+    cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE },
   }
 }
 
-/**
- * Un pas fixe de simulation. Remplit state.events ('takeoff', 'ring', 'land_perfect', 'land_ok', 'crash', 'end').
- * Session 1 : sol, décollage, vol sans rotation, réception simplifiée.
- * Session 2 : rotation, alignement, réception à 3 niveaux, crash, stun, chrono.
- * Session 3 : anneaux (via rings.js), vent.
- */
+/** Un pas fixe. Remplit state.events ('takeoff', 'land_flat', 'land_hard', 'wipe', 'gate', 'end'). */
 export function step(state, dt) {
-  // Session 1
+  if (state.phase !== 'run') return
+  state.t += dt
+  // Le chrono à zéro n'interrompt pas un saut : le dernier vol compte jusqu'à la réception.
+  if (state.t >= TUNING.RUN_TIME) {
+    if (state.grounded) return finish(state)
+    state.ending = true
+  }
+
+  if (state.wipe > 0) {
+    state.wipe -= dt
+    state.steer = 0                // pendant la chute, le doigt ne sert à rien
+    state.press = false
+  }
+
+  // La détente part au relâcher, pas à l'appui : c'est le timing qui fait le saut.
+  if (state.wasPress && !state.press && state.grounded && state.wipe <= 0) pop(state)
+  state.wasPress = state.press
+
+  if (state.grounded && state.press) {
+    state.charge = Math.min(1, state.charge + dt / TUNING.JUMP_CHARGE)
+  } else if (!state.press) {
+    state.charge -= state.charge * (1 - Math.exp(-6 * dt))
+  }
+
+  if (state.grounded) stepGround(state, dt)
+  else stepAir(state, dt)
+
+  const target = state.wipe > 0 ? 0 : state.steer
+  state.lean += (target - state.lean) * (1 - Math.exp(-8 * dt))
+  stepCamera(state, dt)
 }
 
-/**
- * Intègre un vol balistique depuis (x, y) à (vx, vy) jusqu'au contact. Pour rings.js.
- * @returns {{ apex: {x, y}, land: {x, y}, t: number }}
- */
-export function simulateFlight(terrainObj, x, y, vx, vy, wind) {
-  // Session 3
-  return { apex: { x, y }, land: { x, y }, t: 0 }
+function stepGround(state, dt) {
+  const T = TUNING
+  const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
+  const g = state.terrain.sample(state.x, state.z)
+  const hd = g.hx * dx + g.hz * dz          // pente le long du cap, négative en descente
+  const inv = 1 / Math.sqrt(1 + hd * hd)
+
+  let s = state.s
+  const gEff = T.G * (state.press ? T.PRESS_MULT : 1)
+  s += -gEff * hd * inv * dt                // la gravité pousse dans la pente, doublée si on plaque
+  const deep = Math.abs(state.x) > T.TRACK_HALF ? T.DEEP_DRAG : 0
+  s -= (T.FRICTION + T.EDGE_DRAG * Math.abs(state.steer) + deep) * s * dt
+  s -= T.AIR_DRAG * s * s * dt
+  s = clamp(s, T.MIN_SPEED, T.MAX_SPEED)
+
+  state.heading += state.steer * T.TURN_RATE * dt
+  // La pente ramène le skieur dans l'axe quand il lâche la carre. Sans ça, un doigt ne suffit pas :
+  // on part en travers et on ne revient jamais. C'est l'axe de la piste, pas la pente locale : suivre
+  // les vaguelettes ferait dériver le skieur hors piste en ligne droite.
+  state.heading -= wrapAngle(state.heading) * T.FALL_ALIGN * (1 - Math.abs(state.steer)) * dt
+  const ndx = Math.sin(state.heading), ndz = -Math.cos(state.heading)
+  state.x += s * ndx * dt
+  state.z += s * ndz * dt
+  state.dist -= s * ndz * dt                // vers -Z : la distance descendue est positive
+  state.s = s
+
+  const ng = state.terrain.sample(state.x, state.z)
+  state.y = ng.y
+  const nhd = ng.hx * ndx + ng.hz * ndz
+  const ninv = 1 / Math.sqrt(1 + nhd * nhd)
+  state.vx = s * ndx * ninv
+  state.vy = s * nhd * ninv
+  state.vz = s * ndz * ninv
+
+  if (state.wipe > 0) return                // on ne décolle pas pendant une chute
+  // Courbure du sol le long du cap : positive sur un dos de bosse.
+  const hdd = ng.hxx * ndx * ndx + 2 * ng.hxz * ndx * ndz + ng.hzz * ndz * ndz
+  const kappa = -hdd / Math.pow(1 + nhd * nhd, 1.5)
+  const colle = T.STICK * (state.press ? T.PRESS_STICK : 1)
+  if (kappa > 0 && s * s * kappa > T.G * colle * ninv) {
+    state.grounded = false
+    state.airTime = 0
+    state.jumpX = state.x                 // d'où on est parti : la longueur du saut se mesure à l'arrivée
+    state.jumpZ = state.z
+    state.events.push('takeoff')
+  }
+}
+
+// La détente : une impulsion vers le haut qui s'ajoute à la vitesse tangentielle déjà là.
+// Lâchée sur la lèvre d'une bosse, elle s'additionne à ce que la courbure donne déjà.
+function pop(state) {
+  const T = TUNING
+  state.vy += T.JUMP_POP * (T.JUMP_MIN + (1 - T.JUMP_MIN) * state.charge)
+  state.grounded = false
+  state.airTime = 0
+  state.jumpX = state.x
+  state.jumpZ = state.z
+  state.charge = 0
+  state.events.push('takeoff')
+}
+
+function stepAir(state, dt) {
+  const T = TUNING
+  state.vy -= T.G * dt
+  state.x += state.vx * dt
+  state.y += state.vy * dt
+  state.z += state.vz * dt
+  state.dist -= state.vz * dt
+  state.airTime += dt
+
+  // Le cap suit toujours le doigt : on se replace pour la réception, pas d'acrobatie en v3.
+  state.heading += state.steer * T.TURN_RATE * T.AIR_STEER * dt
+
+  if (state.airTime < T.TAKEOFF_GRACE) return
+  const g = state.terrain.sample(state.x, state.z)
+  if (state.y > g.y) return
+  land(state, g)
+}
+
+// À plat on garde tout, de travers on encaisse, trop de travers on tombe.
+function land(state, g) {
+  const T = TUNING
+  const v = Math.hypot(state.vx, state.vy, state.vz)
+  const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
+  const hd = g.hx * dx + g.hz * dz
+  const inv = 1 / Math.sqrt(1 + hd * hd)
+
+  // Angle entre la vitesse et le plan de la pente, mesuré par la normale du terrain.
+  const nlen = Math.sqrt(g.hx * g.hx + 1 + g.hz * g.hz)
+  const vn = (-g.hx * state.vx + state.vy - g.hz * state.vz) / nlen
+  const diff = v > 0.01 ? Math.abs(Math.asin(clamp(vn / v, -1, 1))) : 0
+
+  const sTan = state.vx * dx * inv + state.vy * hd * inv + state.vz * dz * inv
+
+  if (diff < T.LAND_PERFECT) {
+    state.s = sTan * T.LAND_BOOST
+    state.events.push('land_flat')
+  } else if (diff < T.LAND_FAIL) {
+    const k = (diff - T.LAND_PERFECT) / (T.LAND_FAIL - T.LAND_PERFECT)
+    state.s = sTan * (1 - T.LAND_LOSS * k)
+    state.events.push('land_hard')
+  } else {
+    state.s = T.WIPE_SPEED
+    state.wipe = T.WIPE_TIME
+    state.chain = 0
+    state.mult = T.MULT_TABLE[0]
+    state.events.push('wipe')
+  }
+
+  // Longueur du saut : trois paliers, trois sons. Une chute ne compte pas comme un saut.
+  const len = Math.hypot(state.x - state.jumpX, state.z - state.jumpZ)
+  state.lastJump = len
+  if (state.wipe <= 0) {
+    if (len < T.JUMP_SHORT) state.events.push('jump_short')
+    else if (len < T.JUMP_MID) state.events.push('jump_mid')
+    else { state.events.push('jump_long'); if (len > state.bestJump) state.bestJump = len }
+  }
+
+  state.s = clamp(state.s, T.MIN_SPEED, T.MAX_SPEED)
+  state.grounded = true
+  state.y = g.y
+  state.vy = 0
+  if (state.ending) finish(state)
+}
+
+function finish(state) {
+  state.phase = 'end'
+  state.steer = 0
+  state.events.push('end')
+}
+
+// La caméra vit dans state : render.js ne fait que la lire.
+function stepCamera(state, dt) {
+  const T = TUNING, cam = state.cam
+  const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
+  const k = 1 - Math.exp(-T.CAM_RATE * dt)
+  cam.x += (state.x - dx * T.CAM_BACK - cam.x) * k
+  cam.y += (state.y + T.CAM_UP - cam.y) * k
+  cam.z += (state.z - dz * T.CAM_BACK - cam.z) * k
+  // Le champ de vision s'ouvre avec la vitesse : le meilleur retour de vitesse qui existe.
+  // La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
+  const sol = state.terrain.height(cam.x, cam.z) + T.CAM_CLEAR
+  if (cam.y < sol) cam.y = sol
+
+  const f = (state.s - T.START_SPEED) / (T.MAX_SPEED - T.START_SPEED)
+  const target = T.FOV_BASE + (T.FOV_FAST - T.FOV_BASE) * clamp(f, 0, 1)
+  cam.fov += (target - cam.fov) * (1 - Math.exp(-T.FOV_RATE * dt))
+}
+
+/** Direction du regard de la caméra, en mètres devant le skieur. Lue par render.js. */
+export function lookAt(state, out) {
+  const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
+  out.x = state.x + dx * TUNING.CAM_LOOK
+  // On vise la neige devant, pas l'horizon : sinon la moitié de l'écran est du ciel.
+  out.y = state.y - TUNING.SLOPE * TUNING.CAM_LOOK
+  out.z = state.z + dz * TUNING.CAM_LOOK
+  return out
 }

@@ -1,14 +1,13 @@
 // Importe les modules purs dans Node et vérifie qu'ils tiennent debout.
 // Pas un banc de test : un filet. Il attrape une faute de syntaxe, un import cassé, un NaN.
 import assert from 'node:assert/strict'
-import { TUNING, STEP, createState, step, canTakeOff, wrapAngle } from './game/physics.js'
+import { TUNING, STEP, createState, step } from './game/physics.js'
 import * as terrain from './game/terrain.js'
-import * as rings from './game/rings.js'
 import { mulberry32 } from './game/rng.js'
 
-const KEYS = ['GRAVITY', 'PRESS_MULT', 'MAX_SPEED', 'MIN_SPEED', 'START_SPEED', 'CRASH_SPEED', 'FRICTION',
-  'ROT_SPEED', 'AIR_TIME_SCALE', 'LAND_PERFECT', 'LAND_FAIL', 'WIND_MAX', 'RUN_TIME',
-  'HILL_BASE', 'HILL_WAVE', 'SLOPE_AVG', 'RING_R', 'MULT_TABLE', 'VIEW_H']
+const KEYS = ['G', 'SLOPE', 'MAX_SPEED', 'START_SPEED', 'TURN_RATE', 'EDGE_DRAG', 'FRICTION',
+  'AIR_DRAG', 'DEEP_DRAG', 'TRACK_HALF', 'LAND_PERFECT', 'LAND_FAIL', 'WIPE_SPEED', 'RUN_TIME',
+  'WAVE_Z', 'MOG_AMP', 'GATE_W', 'MULT_TABLE', 'FOV_BASE', 'CELL']
 for (const k of KEYS) assert.ok(k in TUNING, `TUNING.${k} manque`)
 assert.ok(STEP > 0 && STEP < 1 / 30)
 
@@ -17,26 +16,62 @@ const a = mulberry32(42), b = mulberry32(42)
 assert.equal(a(), b())
 assert.notEqual(mulberry32(1)(), mulberry32(2)())
 
-// terrain : fini et déterministe
+// terrain : fini et déterministe, dérivées cohérentes avec la hauteur
 const t1 = terrain.create(123456), t2 = terrain.create(123456)
-for (const x of [0, 500, 5000, 50000]) {
-  const s = t1.sample(x)
-  assert.ok(Number.isFinite(s.y) && Number.isFinite(s.dy) && Number.isFinite(s.ddy), `sample(${x}) non fini`)
-  assert.equal(s.y, t2.sample(x).y, 'terrain non déterministe')
+for (const [x, z] of [[0, 0], [12, -500], [-30, -5000], [5, -40000]]) {
+  const s = t1.sample(x, z)
+  for (const k of ['y', 'hx', 'hz', 'hxx', 'hxz', 'hzz']) {
+    assert.ok(Number.isFinite(s[k]), `sample(${x}, ${z}).${k} non fini`)
+  }
+  assert.equal(t1.sample(x, z).y, t2.sample(x, z).y, 'terrain non déterministe')
 }
 
-// physique : 10 s de pas fixes, doigt posé une seconde sur deux, rien ne part en NaN
+// Les dérivées analytiques doivent coller à la différence finie, sinon le décollage est faux.
+const e = 0.01
+for (const [x, z] of [[3, -120], [-17, -2500]]) {
+  const y0 = t1.sample(x, z).y
+  const ax = t1.sample(x, z).hx, az = t1.sample(x, z).hz
+  const nx = (t1.sample(x + e, z).y - t1.sample(x - e, z).y) / (2 * e)
+  const nz = (t1.sample(x, z + e).y - t1.sample(x, z - e).y) / (2 * e)
+  assert.ok(Math.abs(ax - nx) < 1e-3, `hx faux en ${x},${z} : ${ax} contre ${nx}`)
+  assert.ok(Math.abs(az - nz) < 1e-3, `hz faux en ${x},${z} : ${az} contre ${nz}`)
+  const axx = t1.sample(x, z).hxx
+  const nxx = (t1.sample(x + e, z).y - 2 * y0 + t1.sample(x - e, z).y) / (e * e)
+  assert.ok(Math.abs(axx - nxx) < 1e-2, `hxx faux en ${x},${z} : ${axx} contre ${nxx}`)
+  const azz = t1.sample(x, z).hzz
+  const nzz = (t1.sample(x, z + e).y - 2 * y0 + t1.sample(x, z - e).y) / (e * e)
+  assert.ok(Math.abs(azz - nzz) < 1e-2, `hzz faux en ${x},${z} : ${azz} contre ${nzz}`)
+}
+
+// Les tremplins sont dans la hauteur : on vérifie leurs dérivées sur le dos de l'un d'eux,
+// sinon le critère de décollage les lit faux et le saut part n'importe comment.
+const r = t1.jump(3, {})
+for (const [x, z] of [[r.x, r.z + 4], [r.x + 3, r.z - 2]]) {
+  const y0 = t1.sample(x, z).y
+  const ax = t1.sample(x, z).hx, az = t1.sample(x, z).hz
+  const nx = (t1.sample(x + e, z).y - t1.sample(x - e, z).y) / (2 * e)
+  const nz = (t1.sample(x, z + e).y - t1.sample(x, z - e).y) / (2 * e)
+  assert.ok(Math.abs(ax - nx) < 1e-3, `hx faux sur un tremplin : ${ax} contre ${nx}`)
+  assert.ok(Math.abs(az - nz) < 1e-3, `hz faux sur un tremplin : ${az} contre ${nz}`)
+  const azz = t1.sample(x, z).hzz
+  const nzz = (t1.sample(x, z + e).y - 2 * y0 + t1.sample(x, z - e).y) / (e * e)
+  assert.ok(Math.abs(azz - nzz) < 1e-2, `hzz faux sur un tremplin : ${azz} contre ${nzz}`)
+}
+assert.ok(t1.sample(r.x, r.z).y - t1.sample(r.x + 40, r.z).y > 1, 'le tremplin ne dépasse pas du terrain')
+
+// physique : 20 s de pas fixes, la carre bouge, rien ne part en NaN ni sous la neige
 const st = createState(123456)
 st.phase = 'run'
-for (let i = 0; i < 1200; i++) {
-  st.pressed = Math.floor(i / 120) % 2 === 0
+for (let i = 0; i < 2400; i++) {
+  st.steer = 0.4 * Math.sin(i / 90)   // des virages tenus, pas un blocage de carre
   step(st, STEP)
   assert.ok(Number.isFinite(st.x) && Number.isFinite(st.y) && Number.isFinite(st.s), `NaN au pas ${i}`)
+  if (st.grounded) {
+    const g = st.terrain.sample(st.x, st.z)
+    assert.ok(Math.abs(st.y - g.y) < 1e-6, `sous la neige au pas ${i}`)
+  }
 }
-assert.ok(st.x >= 0, 'le personnage recule')
-assert.equal(typeof canTakeOff(1000, 0, 0.01), 'boolean')
-assert.ok(Math.abs(wrapAngle(3 * Math.PI)) <= Math.PI + 1e-9)
+assert.ok(st.dist > 100, `le skieur ne descend pas : ${st.dist} m`)
+assert.ok(st.s > 0 && st.s <= TUNING.MAX_SPEED, `vitesse hors bornes : ${st.s}`)
 
-// anneaux : la génération ne jette pas
-rings.ensure(st, st.x + 3000)
-console.log('smoke : ok')
+console.log('smoke : ok, descente de', Math.round(st.dist), 'm en 20 s')

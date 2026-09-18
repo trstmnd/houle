@@ -1,33 +1,48 @@
-# Houle
+# Ski 3000
 
-Descente infinie de dunes, vue de côté, un seul doigt, 60 secondes. Tu maintiens pour charger dans les creux, tu relâches avant la crête pour décoller, tu traverses des anneaux en vol. Le score, c'est ce que tu attrapes en l'air.
+Descente de ski infinie, vue 3/4 arrière, un doigt, 60 secondes. Tu tiens ta ligne, tu prends les
+tremplins, tu essaies d'aller le plus loin possible. Virer freine : c'est tout l'arbitrage du jeu.
 
-**Jouer** : https://trstmnd.github.io/houle/ · **Défier quelqu'un sur ta piste** : le bouton Partager, ou `?seed=NNNNNN` dans l'URL.
+**Jouer** : https://trstmnd.github.io/houle/
 
-Zéro dépendance, zéro build, zéro image : Canvas 2D et JavaScript vanilla, 9 fichiers dans `game/`.
+L'adresse garde le mot `houle`, nom du dépôt à sa création. La renommer casserait le lien déjà
+partagé, c'est la seule raison pour laquelle il reste.
 
-## Coder depuis le téléphone
+- Sur téléphone, glisse le doigt pour virer, ou utilise les deux grosses touches.
+- Sur ordinateur, les flèches, A et D, ou les touches à l'écran à la souris.
+- Chaque piste a une seed, écrite dans l'adresse : partage le lien, tu partages la piste.
 
-1. App Claude, onglet Code, dépôt `trstmnd/houle`, modèle Opus 5.
-2. Tape `Session 1` (puis 2, 3, 4 : le plan est dans `SPEC.md` §11).
-3. Après chaque push, l'agent donne l'URL de preview de sa branche. Ouvre-la, joue.
-4. Réglage : dis la sensation (« ça décolle trop mou »), pas la solution.
-5. Fin de session : `merge`, puis un tap sur la PR dans l'app GitHub.
+## Le code
 
-## En local sur le Mac
+Modules ES servis tels quels, aucun build, aucun `npm install`. Une seule dépendance, `three`,
+chargée par `importmap` depuis un CDN : le jeu a besoin du réseau pour démarrer.
 
-```bash
+| Fichier | Rôle | Pur ? |
+|---|---|---|
+| `game/terrain.js` | Hauteur analytique `h(x, z)` et ses 5 dérivées, tremplins, arbres | oui |
+| `game/physics.js` | `TUNING`, pas fixe, carve, décollage, vol, réception, chute | oui |
+| `game/rng.js` | `mulberry32` | oui |
+| `game/main.js` | Boucle, input, écrans, HUD | non |
+| `game/render.js` | Scène three, grille de terrain glissante, skieur, caméra | non |
+| `game/audio.js` | Oscillateurs WebAudio | non |
+
+`SPEC.md` dit quoi construire, `CLAUDE.md` dit comment travailler, `LATER.md` liste ce qu'on ne
+code pas. `attic/` garde la spec de la version 2D abandonnée.
+
+## Avant chaque push
+
+```sh
+sh check.sh
+```
+
+Syntaxe de chaque fichier, puis les modules purs chargés dans Node : dérivées comparées à la
+différence finie, 20 secondes de simulation sans NaN. En modules ES sans build, une faute de
+syntaxe donne une page blanche sans le moindre message.
+
+## Servir en local
+
+```sh
 python3 -m http.server 8000 --directory game
 ```
 
-Puis http://localhost:8000. Ouvrir `index.html` directement ne marche pas : les modules ES exigent un serveur.
-
-## Fichiers
-
-| Fichier | Rôle |
-|---|---|
-| `SPEC.md` | La spec v2 : mécanique, constantes, sessions, pipeline |
-| `CLAUDE.md` | Les consignes de l'agent qui code |
-| `LATER.md` | Ce qu'on ne code pas ce week-end |
-| `game/` | Le jeu |
-| `check.sh` | Syntaxe et import de chaque module, à passer avant chaque push |
+`file://` ne charge pas les modules ES.
