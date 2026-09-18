@@ -17,6 +17,11 @@ const elTimer = document.getElementById('timer')
 const elFlash = document.getElementById('flash')
 const elJump = document.getElementById('jump')
 const elJumpLen = document.getElementById('jump-len')
+const pads = document.getElementById('pads')
+const padL = document.getElementById('pad-l')
+const padR = document.getElementById('pad-r')
+const elTuto = document.getElementById('tuto')
+const elTutoText = document.getElementById('tuto-text')
 
 function readSeed() {
   const raw = new URLSearchParams(location.search).get('seed')
@@ -56,12 +61,39 @@ let paused = false
 let inputLock = 0   // input ignoré juste après un changement d'écran (SPEC §7)
 let pointerId = -1, pointerOrigin = 0, pointerSteer = 0
 let keyLeft = false, keyRight = false, keySteer = 0
+let padSteer = 0
+let padDir = 0      // -1 ou 1 tant qu'une grosse touche est tenue
+
+// Les grosses touches servent la souris autant que le pouce : tenir, pas cliquer.
+function bindPad(el, dir) {
+  const on = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    startRun()
+    padDir = dir
+    el.classList.add('on')
+    el.setPointerCapture && e.pointerId !== undefined && el.setPointerCapture(e.pointerId)
+  }
+  const off = (e) => {
+    e.stopPropagation()
+    if (padDir === dir) padDir = 0
+    el.classList.remove('on')
+  }
+  el.addEventListener('pointerdown', on)
+  el.addEventListener('pointerup', off)
+  el.addEventListener('pointercancel', off)
+  el.addEventListener('pointerleave', off)
+}
+bindPad(padL, -1)
+bindPad(padR, 1)
 
 function startRun() {
   if (state.phase !== 'title' || inputLock > 0) return
   state.phase = 'run'
   titleScreen.hidden = true
   hud.hidden = false
+  tutoStep = tutoDone ? -1 : 0
+  showTuto()
 }
 
 function endRun() {
@@ -72,6 +104,8 @@ function endRun() {
   setText('end-seed', String(seed).padStart(6, '0'))
   endScreen.hidden = false
   hud.hidden = true            // la carte de fin recouvre le HUD, autant le retirer
+  pads.hidden = true
+  elTuto.hidden = true
   inputLock = TUNING.INPUT_LOCK
 }
 
@@ -86,6 +120,7 @@ function restart(newSeed) {
   state.phase = 'run'
   endScreen.hidden = true
   hud.hidden = false
+  pads.hidden = false
   inputLock = TUNING.INPUT_LOCK
   lastSpeed = lastDist = lastTimer = -1
   acc = 0
@@ -165,12 +200,47 @@ function updateSteer(dt) {
   if (dir !== 0) keySteer = clamp(keySteer + dir * dt / T.KEY_RAMP, -1, 1)
   else keySteer -= keySteer * (1 - Math.exp(-dt / T.STEER_RETURN))
 
+  if (padDir !== 0) padSteer = clamp(padSteer + padDir * dt / T.KEY_RAMP, -1, 1)
+  else padSteer -= padSteer * (1 - Math.exp(-dt / T.STEER_RETURN))
+
+  // Le doigt sur la piste gagne, puis les grosses touches, puis le clavier.
   if (pointerId !== -1) state.steer = pointerSteer
+  else if (padDir !== 0 || Math.abs(padSteer) > 0.001) state.steer = padSteer
   else if (dir !== 0 || Math.abs(keySteer) > 0.001) state.steer = keySteer
   else state.steer -= state.steer * (1 - Math.exp(-dt / T.STEER_RETURN))
 }
 
 let flashTimer = 0, jumpTimer = 0
+
+// Didacticiel : une étape à la fois, chacune attend son geste. Jamais de texte qu'on ne peut pas faire disparaître.
+const TUTO = [
+  { texte: 'Tiens une touche, ou glisse le doigt', fait: (s) => Math.abs(s.steer) > 0.35 },
+  { texte: 'Lâche : le skieur revient dans l\'axe', fait: (s) => Math.abs(s.steer) < 0.05 && s.t > 3 },
+  { texte: 'Virer freine. Tout droit, ça va vite', fait: (s) => s.s > 22 },
+  { texte: 'Vise les piquets orange : ce sont les tremplins', fait: (s) => !s.grounded },
+]
+let tutoStep = 0
+let tutoDone = readBest('houle:tuto') === 1
+
+function showTuto() {
+  if (tutoStep < 0 || tutoStep >= TUTO.length) {
+    elTuto.hidden = true
+    return
+  }
+  elTutoText.textContent = TUTO[tutoStep].texte
+  elTuto.hidden = false
+}
+
+function updateTuto() {
+  if (tutoStep < 0 || tutoStep >= TUTO.length) return
+  if (!TUTO[tutoStep].fait(state)) return
+  tutoStep++
+  if (tutoStep >= TUTO.length) {
+    tutoDone = true
+    writeBest('houle:tuto', 1)
+  }
+  showTuto()
+}
 
 function drain() {
   const events = state.events
@@ -242,6 +312,7 @@ function frame(now) {
     while (acc >= STEP) { step(state, STEP); acc -= STEP }
     drain()
     updateHud()
+    updateTuto()
   }
   audio.setWind(state.s / TUNING.MAX_SPEED, !state.grounded)
   render.draw(state, dt)
