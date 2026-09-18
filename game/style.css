@@ -157,7 +157,7 @@ html, body {
   position: fixed;
   left: 16px;
   right: 16px;
-  top: calc(var(--pad-top) + 40vh);
+  top: calc(var(--pad-top) + 25vh);
   display: flex;
   justify-content: center;
   pointer-events: none;

@@ -86,8 +86,8 @@ export function init(canvas) {
 
   // Ombre de contact : trois lignes, et le skieur cesse de flotter au-dessus de la neige.
   shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1.15, 14),
-    new THREE.MeshBasicMaterial({ color: 0x33506B, transparent: true, opacity: 0.32, depthWrite: false }),
+    new THREE.CircleGeometry(1, 18),
+    new THREE.MeshBasicMaterial({ color: 0x3C5E7C, transparent: true, opacity: 0.3, depthWrite: false }),
   )
   shadow.rotation.x = -Math.PI / 2
   scene.add(shadow)
@@ -159,9 +159,10 @@ export function draw(state, dt) {
   const gy = state.terrain.height(state.x, state.z)
   const air = state.y - gy
   shadow.position.set(state.x, gy + 0.06, state.z)
-  const k = 1 / (1 + air * 0.09)
-  shadow.scale.setScalar(0.75 + k * 0.45)
-  shadow.material.opacity = 0.34 * k
+  shadow.rotation.z = state.heading          // une ellipse à la taille des skis, tournée comme eux
+  const k = 1 / (1 + air * 0.1)
+  shadow.scale.set(0.42 + 0.2 * (1 - k), 1.05 + 0.5 * (1 - k), 1)
+  shadow.material.opacity = 0.32 * k
 
   const cam = state.cam
   camera.position.set(cam.x, cam.y, cam.z)
