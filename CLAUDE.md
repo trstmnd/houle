@@ -1,4 +1,4 @@
-# Houle : consignes pour l'agent qui code
+# Ski 3000 : consignes pour l'agent qui code
 
 Tu codes un mini-jeu web en un week-end pour Tristan, qui te pilote souvent depuis son téléphone. **Lis `SPEC.md` en entier avant la première ligne de code.** `LATER.md` est la liste de ce qu'on ne code pas. Ce fichier dit comment travailler, la spec dit quoi construire.
 

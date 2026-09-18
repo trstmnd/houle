@@ -3,7 +3,10 @@
 Descente de ski infinie, vue 3/4 arrière, un doigt, 60 secondes. Tu tiens ta ligne, tu prends les
 tremplins, tu essaies d'aller le plus loin possible. Virer freine : c'est tout l'arbitrage du jeu.
 
-**Jouer** : https://trstmnd.github.io/houle/ (le dépôt et l'URL gardent le nom `houle`)
+**Jouer** : https://trstmnd.github.io/houle/
+
+L'adresse garde le mot `houle`, nom du dépôt à sa création. La renommer casserait le lien déjà
+partagé, c'est la seule raison pour laquelle il reste.
 
 - Sur téléphone, glisse le doigt pour virer, ou utilise les deux grosses touches.
 - Sur ordinateur, les flèches, A et D, ou les touches à l'écran à la souris.

@@ -6,7 +6,7 @@ import * as audio from './audio.js'
 
 // Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
 // c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
-const VERSION = '0.8.0'
+const VERSION = '0.9.0'
 
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
@@ -41,7 +41,7 @@ try { history.replaceState(null, '', '?seed=' + seed) } catch (e) { /* navigatio
 
 render.init(canvas)
 let state = createState(seed)
-window.__houle = state   // poignée de debug : lire l'état depuis la console du téléphone
+window.__ski = state   // poignée de debug : lire l'état depuis la console du téléphone
 
 // Records : par piste et tous terrains. En navigation privée, l'accès jette, on s'en passe.
 function readBest(key) {
@@ -51,7 +51,11 @@ function writeBest(key, v) {
   try { localStorage.setItem(key, String(v)) } catch (e) { /* navigation privée */ }
 }
 
-const seedKey = 'houle:best:' + seed
+const seedKey = 'ski3000:best:' + seed
+// Les records d'avant le renommage sont repris une fois, puis oubliés : personne ne perd sa piste.
+if (readBest(seedKey) === 0 && readBest('houle:best:' + seed) > 0) {
+  writeBest(seedKey, readBest('houle:best:' + seed))
+}
 let best = readBest(seedKey)
 setText('title-seed', String(seed).padStart(6, '0'))
 setText('title-version', VERSION)
@@ -141,7 +145,7 @@ function restart(newSeed) {
     return
   }
   state = createState(seed)
-  window.__houle = state
+  window.__ski = state
   state.phase = 'run'
   endScreen.hidden = true
   hud.hidden = false
@@ -247,7 +251,7 @@ const TUTO = [
   { texte: 'Tiens espace dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
 ]
 let tutoStep = 0
-let tutoDone = readBest('houle:tuto') === 1
+let tutoDone = readBest('ski3000:tuto') === 1
 
 function showTuto() {
   if (tutoStep < 0 || tutoStep >= TUTO.length) {
@@ -264,7 +268,7 @@ function updateTuto() {
   tutoStep++
   if (tutoStep >= TUTO.length) {
     tutoDone = true
-    writeBest('houle:tuto', 1)
+    writeBest('ski3000:tuto', 1)
   }
   showTuto()
 }
