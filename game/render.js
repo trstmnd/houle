@@ -16,7 +16,7 @@ const PEAK_HI = 0xFFC9A6, PEAK_LO = 0x6E4E86   // chaîne lointaine : alpenglow 
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+let skier, skierBody, armL, armR, skiL, skiR, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
 let streaks
 let pylons, cables, chairs
 let liftRow = NaN
@@ -106,15 +106,15 @@ export function init(canvas) {
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), vif)
   head.position.y = 1.72
   const skiGeo = new THREE.BoxGeometry(0.14, 0.06, 1.75)
-  const skiL = new THREE.Mesh(skiGeo, dark); skiL.position.set(-0.19, 0.06, 0)
-  const skiR = new THREE.Mesh(skiGeo, dark); skiR.position.set(0.19, 0.06, 0)
+  skiL = new THREE.Mesh(skiGeo, dark); skiL.position.set(-0.19, 0.06, 0)
+  skiR = new THREE.Mesh(skiGeo, dark); skiR.position.set(0.19, 0.06, 0)
   // Jambes et bras : sans eux, vu de dos, le skieur est une quille sur deux barres.
   const legGeo = new THREE.BoxGeometry(0.17, 0.72, 0.19)
   const legL = new THREE.Mesh(legGeo, dark); legL.position.set(-0.19, 0.42, 0)
   const legR = new THREE.Mesh(legGeo, dark); legR.position.set(0.19, 0.42, 0)
   const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.62)
-  const armL = new THREE.Mesh(armGeo, vif); armL.position.set(-0.36, 1.2, -0.22)
-  const armR = new THREE.Mesh(armGeo, vif); armR.position.set(0.36, 1.2, -0.22)
+  armL = new THREE.Mesh(armGeo, vif); armL.position.set(-0.36, 1.2, -0.22)
+  armR = new THREE.Mesh(armGeo, vif); armR.position.set(0.36, 1.2, -0.22)
   skierBody.add(torso, head, skiL, skiR, legL, legR, armL, armR)
   skier.add(skierBody)
   scene.add(skier)
@@ -316,12 +316,27 @@ export function draw(state, dt) {
   updateFlags(state)
 
   skier.position.set(state.x, state.y, state.z)
-  skier.rotation.y = -state.heading
-  // Inclinaison dans le virage, et le corps se plie quand ça va vite.
-  skierBody.rotation.z = state.lean * 0.55
-  // On se ramasse en chargeant : c'est le seul retour visuel de la détente à venir.
+  // Les skis dérapent un peu au-delà du cap dans le virage : c'est ce décalage qui fait le carving.
+  skier.rotation.y = -state.heading - state.lean * 0.2
+
+  // Le skieur se penche DANS le virage. Le signe était inversé : à gauche, il partait à droite.
+  const lean = state.lean
+  skierBody.rotation.z = -lean * 0.62
+  skierBody.rotation.y = lean * 0.26              // les épaules ouvrent vers l'intérieur
+  // On se ramasse en chargeant, et on se plie quand ça va vite.
   skierBody.rotation.x = 0.12 + 0.25 * (state.s / TUNING.MAX_SPEED) + state.charge * 0.32 + (state.wipe > 0 ? 0.9 : 0)
   skierBody.position.y = -0.2 * state.charge
+
+  // Les bras contrebalancent : le bras extérieur monte, l'intérieur descend vers la neige.
+  armL.rotation.x = -0.5 - lean * 0.9 - state.charge * 0.5
+  armR.rotation.x = -0.5 + lean * 0.9 - state.charge * 0.5
+  armL.rotation.z = -0.25 - lean * 0.5
+  armR.rotation.z = 0.25 - lean * 0.5
+  // Les skis prennent la carre, et se rapprochent quand on charge.
+  skiL.rotation.z = -lean * 0.42
+  skiR.rotation.z = -lean * 0.42
+  skiL.position.x = -0.19 + lean * 0.05
+  skiR.position.x = 0.19 + lean * 0.05
 
   // L'ombre reste au sol et s'estompe avec la hauteur : c'est elle qui dit où on va retomber.
   const gy = state.terrain.height(state.x, state.z)

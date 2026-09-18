@@ -33,6 +33,7 @@ const cache = new Map()
 globalThis.document = {
   hidden: false,
   documentElement: {},
+  body: elem('body'),
   getElementById(id) {
     demandes.push(id)
     if (!cache.has(id)) cache.set(id, elem(id))

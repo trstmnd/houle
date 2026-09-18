@@ -129,6 +129,7 @@ export function createState(seed) {
     cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE, roll: 0 },
   }
   gates.create(state)
+  clampCamera(state)
   return state
 }
 
@@ -313,13 +314,20 @@ function stepCamera(state, dt) {
   cam.roll += (roll - cam.roll) * (1 - Math.exp(-T.CAM_ROLL_RATE * dt))
 
   // Le champ de vision s'ouvre avec la vitesse : le meilleur retour de vitesse qui existe.
-  // La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
-  const sol = state.terrain.height(cam.x, cam.z) + T.CAM_CLEAR
-  if (cam.y < sol) cam.y = sol
+  clampCamera(state)
 
   const f = (state.s - T.START_SPEED) / (T.MAX_SPEED - T.START_SPEED)
   const target = T.FOV_BASE + (T.FOV_FAST - T.FOV_BASE) * clamp(f, 0, 1)
   cam.fov += (target - cam.fov) * (1 - Math.exp(-T.FOV_RATE * dt))
+}
+
+// La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
+// Appelé aussi à la création, sinon l'écran de titre se retrouve enfoncé dans la colline, et on
+// voit le ciel à travers le sol.
+function clampCamera(state) {
+  const cam = state.cam
+  const sol = state.terrain.height(cam.x, cam.z) + TUNING.CAM_CLEAR
+  if (cam.y < sol) cam.y = sol
 }
 
 /** Direction du regard de la caméra, en mètres devant le skieur. Lue par render.js. */
