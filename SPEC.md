@@ -616,16 +616,17 @@ Le code fait foi sur GitHub : `trstmnd/houle`, public. Le Drive n'est qu'un clon
 
 | Événement | Ce qui se passe | URL |
 |---|---|---|
-| Push sur `main` | GitHub Pages redéploie la branche en ~60 s, `.nojekyll` évite tout rendu Jekyll, la racine redirige vers `game/` en gardant `?seed=` | `https://trstmnd.github.io/houle/` |
-| Push sur une autre branche | Rien n'est déployé tant que le workflow de preview n'est pas actif | |
-| Workflow de preview actif (attend le scope `workflow` sur le jeton) | Actions : `check.sh`, puis `game/` sur `gh-pages`, `main` à la racine, toute autre branche dans `preview/<branche>/`, rouge = rien ne part | `https://trstmnd.github.io/houle/preview/<branche>/` |
+| Push sur n'importe quelle branche | Actions : `check.sh`, puis `game/` publié sur `gh-pages` dans `preview/<branche>/`. Rouge = rien ne part | `https://trstmnd.github.io/houle/preview/<branche>/` |
+| Push sur `main` | Idem, à la racine. La racine redirige vers `game/` en gardant `?seed=` | `https://trstmnd.github.io/houle/` |
+
+Délai : environ 60 s après le push. L'URL de preview d'une branche ne change pas pendant toute la session : Tristan la garde ouverte et recharge.
 
 ### La boucle, depuis le téléphone
 
 1. Claude Code (app Claude, onglet Code, dépôt `trstmnd/houle`, modèle Opus 5) : « Session 1 ».
-2. L'agent code un bloc, `sh check.sh`, commit, **push sur `main`**, donne l'URL.
-3. Tristan recharge l'URL, joue, dit une sensation. Jamais deux fonctionnalités sans tester entre les deux.
-4. Si l'agent ne peut pas pousser sur `main` : PR, un tap dans l'app GitHub, le déploiement suit.
+2. L'agent code un bloc, `sh check.sh`, commit, push, **donne l'URL de preview de sa branche**.
+3. Tristan ouvre l'URL, joue, dit une sensation. Jamais deux fonctionnalités sans tester entre les deux.
+4. Fin de session : « merge ». L'agent ouvre la PR, Tristan la fusionne depuis l'app GitHub, `main` se déploie.
 
 Sur le Mac, la session a un navigateur : `.claude/launch.json` lance le serveur local, l'agent teste lui-même avant de pousser.
 

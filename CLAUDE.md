@@ -6,7 +6,7 @@ Tu codes un mini-jeu web en un week-end pour Tristan, qui te pilote souvent depu
 
 | Il écrit | Tu fais |
 |---|---|
-| « Session N » | `git pull`. Lis `SPEC.md` §11, session N. Enchaîne ses blocs **un à la fois** : code, `sh check.sh`, commit, push, **donne l'URL de preview**, et attends son retour avant le bloc suivant. Mets à jour la ligne de la session dans « État » ci-dessous |
+| « Session N » | `git pull`. Lis `SPEC.md` §11, session N. Enchaîne ses blocs **un à la fois** : code, `sh check.sh`, commit, push, **donne l'URL de preview de ta branche**, et attends son retour avant le bloc suivant. Mets à jour la ligne de la session dans « État » ci-dessous |
 | Une sensation (« ça décolle trop mou », « les bosses arrivent trop vite », « je crashe tout le temps ») | C'est un réglage. Tu nommes **une** constante de `TUNING`, tu la bouges d'un cran (10 à 25 %), tu dis l'ancienne et la nouvelle valeur, push, URL. Jamais deux constantes dans le même push. Ordre de réglage dans `SPEC.md` §10 |
 | Un bug (« je passe sous le sol », « le son ne part pas ») | Reproduis-le par le raisonnement, corrige, `check.sh`, push, URL, et dis en une ligne ce que c'était |
 | « merge » | Ouvre la PR vers `main` avec un titre et 3 lignes. S'il te manque le droit de la fusionner, dis-le, il le fait depuis l'app GitHub |
@@ -30,10 +30,10 @@ Après chaque push, ta réponse tient en 5 lignes : ce qui a changé, l'URL, ce 
 
 ## Pipeline
 
-- **Le jeu est servi par GitHub Pages depuis la branche `main`** : https://trstmnd.github.io/houle/ (la racine redirige vers `game/` en gardant `?seed=`). Un push sur `main` redéploie en ~60 s.
-- **Pousse sur `main` directement pendant le week-end**, un commit par bloc. Si le push sur `main` t'est refusé, pousse ta branche et ouvre une PR : Tristan la fusionne depuis l'app GitHub en un tap, le déploiement suit.
-- Après chaque push, donne l'URL https://trstmnd.github.io/houle/ et dis-lui de recharger. Pas de cache à craindre : Pages sert les fichiers tels quels.
-- Preview par branche (`preview/<branche>/`, workflow `.github/workflows/pages.yml`) : **pas encore active**, elle attend le scope `workflow` sur le jeton de Tristan. Quand elle l'est, `CLAUDE.md` et `SPEC.md` §12 le disent et l'URL de preview remplace le push sur `main`.
+- **Chaque push déploie ta branche** : Actions lance `check.sh` puis publie `game/` sur `gh-pages`. Ta branche `claude/<slug>` est jouable sur `https://trstmnd.github.io/houle/preview/claude/<slug>/` environ 60 s après le push. Rien à fusionner pour tester.
+- `main` est publié à la racine : https://trstmnd.github.io/houle/ (la racine redirige vers `game/` en gardant `?seed=`).
+- Après chaque push, donne l'URL de preview complète de ta branche, telle quelle. Si le run Actions est rouge, rien n'est déployé : lis le log, corrige, repousse.
+- Fin de session : « merge » → tu ouvres la PR, Tristan la fusionne en un tap dans l'app GitHub, `main` se redéploie.
 - Session sur le Mac (tu as un navigateur) : `.claude/launch.json` lance `python3 -m http.server 8000 --directory game`. Teste toi-même avant de pousser. `file://` ne charge pas les modules ES.
 - Session cloud (pas de navigateur) : `check.sh` puis push puis URL. Tu ne peux pas voir le jeu, Tristan le voit pour toi.
 
