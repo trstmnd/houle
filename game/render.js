@@ -3,18 +3,21 @@ import * as THREE from 'three'
 import { TUNING, lookAt } from './physics.js'
 
 // Palette montagne. Le low poly ne tient que si les couleurs sont franches et peu nombreuses.
-const SKY_TOP = 0x2F7BC4, SKY_LOW = 0xCFE8F7, FOG = 0xCFE8F7
-const SNOW = 0xFFFFFF, SNOW_SHADE = 0x6E97C6, ROCK = 0x6E6357
-const STONE = 0x6A6E74, TRACK_COL = 0xB9CFE4
+// Palette crépusculaire, arcade plutôt que documentaire : le ciel va de l'indigo au feu, et la
+// neige prend cette lumière. Trois arrêts dans le dégradé, sinon un coucher de soleil fait plat.
+const SKY_TOP = 0x1E2A6E, SKY_MID = 0xB8508F, SKY_LOW = 0xFF9E6B, FOG = 0xD98CA8
+const SNOW = 0xF4F6FF, SNOW_SHADE = 0x5E5CB8, ROCK = 0x413753
+const STONE = 0x5A5568, TRACK_COL = 0xB9A6E0
 const GATE_L = 0xE0453A, GATE_R = 0x1F7BB7   // rouge à gauche, bleu à droite, comme un slalom
 const PYLON = 0x8D949B, CABLE = 0x3A434B, CHAIR = 0xD9532E
-const PINE = 0x27443A, TRUNK = 0x4A3524, SUN = 0xFFF6E2
+const PINE = 0x1B3348, TRUNK = 0x3A2438, SUN = 0xFFE3C8
 const RAMP = 0xF08A2B
-const PEAK_HI = 0xE8F2FA, PEAK_LO = 0xA9C9E2   // chaîne lointaine : blanche en haut, noyée de brume en bas
+const PEAK_HI = 0xFFC9A6, PEAK_LO = 0x6E4E86   // chaîne lointaine : alpenglow en haut, violette en bas
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
 let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+let streaks
 let pylons, cables, chairs
 let liftRow = NaN
 const gateCol = { vif: null, terne: null }
@@ -30,16 +33,20 @@ const tmpObj = new THREE.Object3D()   // réutilisé pour poser les fanions, rie
 
 const NX = TUNING.GRID_NX, NZ = TUNING.GRID_NZ, CELL = TUNING.CELL
 const W = NX + 1                      // sommets par rangée
+const STREAK_N = 70       // traînées de vitesse, en segments
+const STREAK_V = 26       // m/s à partir desquels elles apparaissent
 const SPRAY_N = 260       // pool de flocons, jamais réalloué
 const TRACK_N = 90        // points de la trace, chacun deux sommets
 const TRACK_STEP = 1.3    // m entre deux points
 const TRACK_W = 0.42      // m de demi-largeur
-const SPRAY_LIFE = 0.75   // s
+const SPRAY_LIFE = 0.6    // s
 const heights = new Float32Array((NX + 1) * (NZ + 1))
 const sprayPos = new Float32Array(SPRAY_N * 3)
 const sprayVel = new Float32Array(SPRAY_N * 3)
 const sprayLife = new Float32Array(SPRAY_N)
 let sprayHead = 0
+const streakPos = new Float32Array(STREAK_N * 6)
+const streakLife = new Float32Array(STREAK_N)
 const trackPos = new Float32Array(TRACK_N * 2 * 3)
 const trackCol = new Float32Array(TRACK_N * 2 * 3)
 let trackLastX = NaN, trackLastZ = 0
@@ -59,7 +66,7 @@ export function init(canvas) {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.3
+  renderer.toneMappingExposure = 1.15
 
   scene = new THREE.Scene()
   scene.background = new THREE.Color(SKY_LOW)
@@ -70,9 +77,9 @@ export function init(canvas) {
 
   camera = new THREE.PerspectiveCamera(TUNING.FOV_BASE, 1, 0.5, 900)
 
-  scene.add(new THREE.HemisphereLight(0xDCEBFA, 0x7C93AA, 0.95))
-  const sun = new THREE.DirectionalLight(SUN, 1.75)
-  sun.position.set(-0.78, 0.5, 0.38)
+  scene.add(new THREE.HemisphereLight(0xCBD8FF, 0x4A3F7A, 0.9))
+  const sun = new THREE.DirectionalLight(SUN, 1.6)
+  sun.position.set(-0.85, 0.3, 0.42)
   scene.add(sun)
 
   // Grille de terrain : PlaneGeometry posée à plat, hauteurs réécrites quand la grille change de case.
@@ -92,10 +99,11 @@ export function init(canvas) {
   skier = new THREE.Group()
   skierBody = new THREE.Group()
   const dark = new THREE.MeshLambertMaterial({ color: 0x2B3A44 })
-  const suit = new THREE.MeshLambertMaterial({ color: 0xE8542F })
+  const suit = new THREE.MeshLambertMaterial({ color: 0xFF5A1F })
+  const vif = new THREE.MeshLambertMaterial({ color: 0x21E0C8 })
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.75, 4, 8), suit)
   torso.position.y = 1.15
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), dark)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), vif)
   head.position.y = 1.72
   const skiGeo = new THREE.BoxGeometry(0.14, 0.06, 1.75)
   const skiL = new THREE.Mesh(skiGeo, dark); skiL.position.set(-0.19, 0.06, 0)
@@ -105,8 +113,8 @@ export function init(canvas) {
   const legL = new THREE.Mesh(legGeo, dark); legL.position.set(-0.19, 0.42, 0)
   const legR = new THREE.Mesh(legGeo, dark); legR.position.set(0.19, 0.42, 0)
   const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.62)
-  const armL = new THREE.Mesh(armGeo, suit); armL.position.set(-0.36, 1.2, -0.22)
-  const armR = new THREE.Mesh(armGeo, suit); armR.position.set(0.36, 1.2, -0.22)
+  const armL = new THREE.Mesh(armGeo, vif); armL.position.set(-0.36, 1.2, -0.22)
+  const armR = new THREE.Mesh(armGeo, vif); armR.position.set(0.36, 1.2, -0.22)
   skierBody.add(torso, head, skiL, skiR, legL, legR, armL, armR)
   skier.add(skierBody)
   scene.add(skier)
@@ -159,10 +167,21 @@ export function init(canvas) {
   sg.setAttribute('position', new THREE.BufferAttribute(sprayPos, 3))
   sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   spray = new THREE.Points(sg, new THREE.PointsMaterial({
-    color: 0xFFFFFF, size: 0.3, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false,
+    color: 0xFFFFFF, size: 0.17, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false,
   }))
   spray.frustumCulled = false
   scene.add(spray)
+
+  // Traînées de vitesse : des segments qui filent le long du regard. C'est tout l'effet de vitesse
+  // des jeux de glisse arcade, et ça ne coûte que 70 segments.
+  const stg = new THREE.BufferGeometry()
+  stg.setAttribute('position', new THREE.BufferAttribute(streakPos, 3))
+  stg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
+  streaks = new THREE.LineSegments(stg, new THREE.LineBasicMaterial({
+    color: 0xFFFFFF, transparent: true, opacity: 0.4, depthWrite: false,
+  }))
+  streaks.frustumCulled = false
+  scene.add(streaks)
 
   // La trace s'efface vers la queue : dégradé figé une fois, du bleu de neige tassée vers le blanc.
   const tc = new THREE.Color(TRACK_COL), sn = new THREE.Color(SNOW)
@@ -209,9 +228,20 @@ function makeSky() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: { top: { value: new THREE.Color(SKY_TOP) }, low: { value: new THREE.Color(SKY_LOW) } },
+    uniforms: {
+      top: { value: new THREE.Color(SKY_TOP) },
+      mid: { value: new THREE.Color(SKY_MID) },
+      low: { value: new THREE.Color(SKY_LOW) },
+    },
     vertexShader: 'varying float vH; void main() { vH = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform vec3 top; uniform vec3 low; varying float vH; void main() { gl_FragColor = vec4(mix(low, top, clamp(vH * 1.6, 0.0, 1.0)), 1.0); }',
+    fragmentShader: [
+      'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying float vH;',
+      'void main() {',
+      '  float h = clamp(vH * 1.5 + 0.12, 0.0, 1.0);',
+      '  vec3 c = h < 0.35 ? mix(low, mid, h / 0.35) : mix(mid, top, (h - 0.35) / 0.65);',
+      '  gl_FragColor = vec4(c, 1.0);',
+      '}',
+    ].join('\n'),
   })
   const sky = new THREE.Mesh(new THREE.SphereGeometry(600, 16, 10), mat)
   sky.frustumCulled = false
@@ -312,6 +342,7 @@ export function draw(state, dt) {
   }
 
   updateTrack(state)
+  updateStreaks(state, dt)
   updateSpray(state, dt)
   sky.position.copy(camera.position)   // le ciel suit la caméra, sinon on en sort
   peaks.position.set(camera.position.x, state.y - 34, camera.position.z)
@@ -608,6 +639,43 @@ function emit(x, y, z, vx, vy, vz) {
   sprayLife[i] = SPRAY_LIFE
 }
 
+// Les traînées naissent devant le skieur, filent vers l'arrière et meurent. Elles ne servent que
+// la sensation : au-dessous de STREAK_V il n'y en a aucune.
+function updateStreaks(state, dt) {
+  const vite = (state.s - STREAK_V) / (TUNING.MAX_SPEED - STREAK_V)
+  const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
+  for (let i = 0; i < STREAK_N; i++) {
+    const j = i * 6
+    if (streakLife[i] > 0) {
+      streakLife[i] -= dt
+      const d = state.s * dt * 1.9
+      streakPos[j] += dx * d; streakPos[j + 2] += dz * d
+      streakPos[j + 3] += dx * d; streakPos[j + 5] += dz * d
+      if (streakLife[i] <= 0) { streakPos[j + 1] = -9999; streakPos[j + 4] = -9999 }
+      continue
+    }
+    if (vite <= 0 || hash01(i + state.dist) > vite * 0.22) continue
+    // Semées en anneau autour de l'axe du regard, jamais devant le nez du skieur.
+    const a = hash01(i * 3.7 + state.dist) * Math.PI * 2
+    const r = 5 + hash01(i * 7.1 + state.dist) * 16
+    const avant = 14 + hash01(i * 11.3 + state.dist) * 26
+    const cx = state.x + dx * avant + Math.cos(a) * r
+    const cz = state.z + dz * avant + Math.sin(a) * r
+    const cy = state.y + 1.2 + Math.sin(a) * r * 0.5
+    const len = 3 + vite * 9
+    streakPos[j] = cx; streakPos[j + 1] = cy; streakPos[j + 2] = cz
+    streakPos[j + 3] = cx - dx * len; streakPos[j + 4] = cy; streakPos[j + 5] = cz - dz * len
+    streakLife[i] = 0.16 + hash01(i * 5.3 + state.dist) * 0.12
+  }
+  streaks.geometry.attributes.position.needsUpdate = true
+  streaks.material.opacity = 0.12 + 0.34 * Math.max(0, Math.min(1, vite))
+}
+
+function hash01(v) {
+  const s = Math.sin(v * 12.9898) * 43758.5453
+  return s - Math.floor(s)
+}
+
 function updateSpray(state, dt) {
   const T = TUNING
   // En virage, les carres arrachent la neige : d'autant plus qu'on braque et qu'on va vite.
@@ -615,7 +683,7 @@ function updateSpray(state, dt) {
     const force = Math.abs(state.steer) * (state.s / T.MAX_SPEED)
     if (force > 0.08) {
       const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
-      const n = force > 0.45 ? 3 : (force > 0.2 ? 2 : 1)
+      const n = force > 0.45 ? 6 : (force > 0.2 ? 4 : 2)
       const cote = -Math.sign(state.steer)
       for (let k = 0; k < n; k++) {
         const r = (k + 1) / n
@@ -642,7 +710,7 @@ function updateSpray(state, dt) {
 
 /** Effet déclenché par un événement de state.events. */
 export function fx(event, state) {
-  const n = event === 'wipe' ? 46 : (event === 'land_flat' || event === 'land_hard' ? 22 : 0)
+  const n = event === 'wipe' ? 80 : (event === 'land_flat' || event === 'land_hard' ? 40 : 0)
   if (n === 0) return
   const dx = Math.sin(state.heading), dz = -Math.cos(state.heading)
   for (let k = 0; k < n; k++) {

@@ -82,6 +82,8 @@ export class Group extends Obj3D {}
 export class Object3D extends Obj3D {}
 export class Mesh extends MeshLike {}
 export class Points extends MeshLike {}
+export class LineSegments extends MeshLike {}
+export class LineBasicMaterial { constructor(o = {}) { Object.assign(this, o) } }
 export class InstancedMesh extends MeshLike {}
 export class PlaneGeometry extends Geo {
   constructor(w, h, nx, nz) { super(nx, nz) }

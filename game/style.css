@@ -1,6 +1,6 @@
 /* Ski 3000. Palette montagne, tenue en accord à la main avec celle de render.js. Pas de mode sombre. */
 :root {
-  --sky: #9FD2EE;
+  --sky: #B8508F;
   --snow: #FDFDFF;
   --shade: #7FA6CE;
   --pine: #27443A;
@@ -54,13 +54,16 @@ html, body {
 }
 .hud-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .stat { display: flex; align-items: baseline; gap: 4px; }
+/* Le ciel est passé au crépuscule : un texte sombre ne s'y lit plus. Blanc, et une ombre portée
+   sombre pour tenir aussi sur la neige claire. */
 .stat b {
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  text-shadow: 0 2px 8px rgba(255, 255, 255, 0.85);
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(20, 14, 40, 0.75), 0 0 2px rgba(20, 14, 40, 0.9);
 }
-.stat span { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+.stat span { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, 0.78); text-shadow: 0 1px 6px rgba(20, 14, 40, 0.7); }
 .stat-dist b { font-size: 24px; }
 #timer.low { color: var(--danger); }
 #timer.blink { animation: blink 0.6s steps(2) infinite; }
@@ -73,15 +76,16 @@ html, body {
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.04em;
-  text-shadow: 0 2px 10px rgba(255, 255, 255, 0.85);
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(20, 14, 40, 0.8), 0 0 2px rgba(20, 14, 40, 0.9);
 }
-.speedo span { font-size: 14px; font-weight: 700; color: var(--ink-soft); }
+.speedo span { font-size: 14px; font-weight: 700; color: rgba(255, 255, 255, 0.78); text-shadow: 0 1px 6px rgba(20, 14, 40, 0.7); }
 .bar {
   flex: 1 0 100%;
   height: 4px;
   margin-top: 6px;
   border-radius: 2px;
-  background: rgba(22, 36, 46, 0.16);
+  background: rgba(255, 255, 255, 0.28);
   overflow: hidden;
 }
 .bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--accent); }
@@ -98,8 +102,8 @@ html, body {
   gap: 5px;
   animation: pop 0.9s ease-out forwards;
 }
-.jump b { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; color: var(--accent); text-shadow: 0 2px 12px rgba(255, 255, 255, 0.9); }
-.jump span { font-size: 16px; font-weight: 800; color: var(--accent); }
+.jump b { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; color: #FFD166; text-shadow: 0 2px 14px rgba(20, 14, 40, 0.85); }
+.jump span { font-size: 16px; font-weight: 800; color: #FFD166; text-shadow: 0 2px 10px rgba(20, 14, 40, 0.8); }
 .jump.long b { font-size: 64px; }
 @keyframes pop {
   0% { transform: translateY(14px) scale(0.85); opacity: 0; }
