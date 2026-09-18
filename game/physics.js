@@ -78,24 +78,53 @@ export function canTakeOff(s, dy, ddy) {
   return s * s * kappa > TUNING.GRAVITY * cosTheta
 }
 
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
+
+// Combien de longueurs d'onde on fouille pour trouver le sommet de départ. Structurel, pas du feel.
+const START_SEARCH_WAVES = 3
+
+// φ0 = 3π/2 pose l'octave principal sur un sommet en x = 0, mais les deux autres octaves ont une
+// phase seedée : sur beaucoup de seeds, 0 tombe en pleine montée. On démarre donc sur la crête dont
+// la descente est la plus franche, ce que la spec demande vraiment : 2 secondes de descente d'entrée.
+function startX(t) {
+  const span = TUNING.HILL_WAVE * START_SEARCH_WAVES
+  const cs = t.crests(0, span)
+  if (cs.length === 0) return 0
+  let bestX = cs[0].x, bestDrop = -Infinity
+  for (let i = 0; i < cs.length; i++) {
+    const xc = cs[i].x
+    let drop = 0
+    for (let d = 8; d <= TUNING.HILL_WAVE; d += 8) {
+      const g = t.sample(xc + d)
+      if (g.dy < 0) break                       // creux atteint : la descente est finie
+      drop = g.y - cs[i].y
+    }
+    if (drop > bestDrop) { bestDrop = drop; bestX = xc }
+  }
+  return bestX
+}
+
 /** État initial d'une run. SPEC.md §3 « L'objet state ». */
 export function createState(seed) {
   const t = terrain.create(seed)
-  const ground = t.sample(0)
+  const x = startX(t)
+  const ground = t.sample(x)
+  const dy = ground.dy
+  const tx = 1 / Math.sqrt(1 + dy * dy), ty = dy * tx
   return {
     phase: 'title',
     seed, terrain: t, wind: t.wind,
     t: 0, ending: false,
-    x: 0, y: ground.y, vx: 0, vy: 0,
+    x, y: ground.y, vx: TUNING.START_SPEED * tx, vy: TUNING.START_SPEED * ty,
     s: TUNING.START_SPEED,
-    angle: Math.atan2(ground.dy, 1),
+    angle: Math.atan2(dy, 1),
     grounded: true, pressed: false,
     airTime: 0, flightRings: 0, stun: 0, charge: 0,
     score: 0, chain: 0, mult: 1, best: 0,
     rings: [], ringsUpto: 0,
     events: [],
     lastLanding: { quality: '', diff: 0, flips: 0 },
-    cam: { x: 0, y: ground.y, zoom: 1 },
+    cam: { x, y: ground.y, zoom: 1 },
   }
 }
 
@@ -106,7 +135,90 @@ export function createState(seed) {
  * Session 3 : anneaux (via rings.js), vent.
  */
 export function step(state, dt) {
-  // Session 1
+  if (state.phase !== 'run') return
+  state.t += dt                                  // temps réel, la règle du dernier vol arrive en session 2
+  const pressed = state.pressed && state.stun <= 0
+  if (state.stun > 0) state.stun -= dt
+  if (state.grounded) stepGround(state, dt, pressed)
+  else stepAir(state, dt)
+  stepCamera(state, dt)
+}
+
+// Doigt posé : la gravité est multipliée, on plaque et on charge. On ne décolle jamais.
+function stepGround(state, dt, pressed) {
+  const T = TUNING, ter = state.terrain
+  const dy = ter.sample(state.x).dy
+  const tx = 1 / Math.sqrt(1 + dy * dy), ty = dy * tx
+  const gEff = T.GRAVITY * (pressed ? T.PRESS_MULT : 1)
+  let s = state.s + gEff * ty * dt
+  s -= T.FRICTION * s * dt
+  s = clamp(s, T.MIN_SPEED, T.MAX_SPEED)
+  state.x += s * tx * dt
+
+  const g = ter.sample(state.x)                  // recalé sur la courbe, jamais d'erreur accumulée
+  const ndy = g.dy, nddy = g.ddy
+  state.y = g.y
+  state.s = s
+  state.angle = Math.atan2(ndy, 1)
+  const ntx = 1 / Math.sqrt(1 + ndy * ndy), nty = ndy * ntx
+  state.vx = s * ntx
+  state.vy = s * nty
+  state.charge = (s - T.MIN_SPEED) / (T.MAX_SPEED - T.MIN_SPEED)
+
+  if (!pressed && canTakeOff(s, ndy, nddy)) {
+    state.grounded = false
+    state.airTime = 0
+    state.flightRings = 0
+    state.events.push('takeoff')
+  }
+}
+
+function stepAir(state, dt) {
+  const T = TUNING
+  const d = dt * T.AIR_TIME_SCALE                // le ralenti rend la visée possible au doigt
+  state.vx += state.wind * d
+  state.vy += T.GRAVITY * d
+  state.x += state.vx * d
+  state.y += state.vy * d
+  state.airTime += d
+  // Session 2 : backflip doigt posé, alignement sur la trajectoire doigt levé
+
+  if (state.airTime < T.TAKEOFF_GRACE) return    // sinon le premier tick retombe sur la courbe
+  const g = state.terrain.sample(state.x)
+  if (state.y < g.y) return
+  land(state, g.y, g.dy)
+}
+
+// Session 1 : toute réception passe. Les 3 niveaux, le boost et le crash arrivent en session 2.
+function land(state, gy, dy) {
+  const T = TUNING
+  const tx = 1 / Math.sqrt(1 + dy * dy), ty = dy * tx
+  const slope = Math.atan2(dy, 1)
+  const sTan = state.vx * tx + state.vy * ty     // seule la vitesse le long de la pente survit
+
+  state.lastLanding.quality = 'ok'
+  state.lastLanding.diff = wrapAngle(state.angle - slope)
+  state.lastLanding.flips = 0
+
+  state.s = clamp(sTan, T.MIN_SPEED, T.MAX_SPEED)
+  state.grounded = true
+  state.y = gy
+  state.angle = slope
+  state.vx = state.s * tx
+  state.vy = state.s * ty
+  state.charge = (state.s - T.MIN_SPEED) / (T.MAX_SPEED - T.MIN_SPEED)
+  state.events.push('land_ok')
+}
+
+// La caméra vit dans state : render.js ne fait que la lire. Lissage indépendant du framerate.
+function stepCamera(state, dt) {
+  const T = TUNING, cam = state.cam
+  const cx = state.x + T.LOOK_AHEAD * state.charge
+  const cy = state.y + state.vy * T.CAM_LOOK_Y
+  cam.x += (cx - cam.x) * (1 - Math.exp(-T.CAM_RATE_X * dt))
+  cam.y += (cy - cam.y) * (1 - Math.exp(-T.CAM_RATE_Y * dt))
+  const z = 1 - T.ZOOM_MAX * state.charge        // dézoom avec la vitesse, le meilleur retour qui existe
+  cam.zoom += (z - cam.zoom) * (1 - Math.exp(-T.ZOOM_RATE * dt))
 }
 
 /**
