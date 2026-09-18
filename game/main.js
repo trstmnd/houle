@@ -6,7 +6,7 @@ import * as audio from './audio.js'
 
 // Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
 // c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
-const VERSION = '0.7.0'
+const VERSION = '0.8.0'
 
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
@@ -24,6 +24,8 @@ const elJumpLen = document.getElementById('jump-len')
 const pads = document.getElementById('pads')
 const padL = document.getElementById('pad-l')
 const padR = document.getElementById('pad-r')
+const padJump = document.getElementById('pad-jump')
+const elChargeBar = document.getElementById('charge-bar')
 const elTuto = document.getElementById('tuto')
 const elTutoText = document.getElementById('tuto-text')
 
@@ -91,6 +93,24 @@ function bindPad(el, dir) {
 }
 bindPad(padL, -1)
 bindPad(padR, 1)
+
+// La touche de saut ne dirige pas : elle plaque tant qu'on tient, et détend au relâcher.
+padJump.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  audio.init()
+  startRun()
+  state.press = true
+  padJump.classList.add('on')
+})
+function releaseJump(e) {
+  if (e) e.stopPropagation()
+  state.press = false
+  padJump.classList.remove('on')
+}
+padJump.addEventListener('pointerup', releaseJump)
+padJump.addEventListener('pointercancel', releaseJump)
+padJump.addEventListener('pointerleave', releaseJump)
 
 function startRun() {
   if (state.phase !== 'title' || inputLock > 0) return
@@ -174,11 +194,12 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keyLeft = true; e.preventDefault(); startRun() }
   if (e.code === 'ArrowRight' || e.code === 'KeyD') { keyRight = true; e.preventDefault(); startRun() }
-  if (e.code === 'Space') { e.preventDefault(); startRun() }
+  if (e.code === 'Space') { e.preventDefault(); startRun(); state.press = true; padJump.classList.add('on') }
 })
 window.addEventListener('keyup', (e) => {
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') keyLeft = false
   if (e.code === 'ArrowRight' || e.code === 'KeyD') keyRight = false
+  if (e.code === 'Space') releaseJump()
 })
 
 function pause() { paused = true; audio.suspend() }
@@ -189,7 +210,7 @@ function unpause() {
   acc = 0
   audio.resume()
 }
-window.addEventListener('blur', () => { pointerId = -1; pointerSteer = 0; keyLeft = keyRight = false; pause() })
+window.addEventListener('blur', () => { pointerId = -1; pointerSteer = 0; keyLeft = keyRight = false; releaseJump(); pause() })
 window.addEventListener('focus', unpause)
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else unpause() })
 window.addEventListener('contextmenu', (e) => e.preventDefault())
@@ -223,6 +244,7 @@ const TUTO = [
   { texte: 'Lâche : le skieur revient dans l\'axe', fait: (s) => Math.abs(s.steer) < 0.05 && s.t > 3 },
   { texte: 'Virer freine. Tout droit, ça va vite', fait: (s) => s.s > 22 },
   { texte: 'Vise les piquets orange : ce sont les tremplins', fait: (s) => !s.grounded },
+  { texte: 'Tiens espace dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
 ]
 let tutoStep = 0
 let tutoDone = readBest('houle:tuto') === 1
@@ -277,7 +299,7 @@ function flash(bad) {
   flashTimer = 0.06
 }
 
-let lastSpeed = -1, lastDist = -1, lastTimer = -1
+let lastSpeed = -1, lastDist = -1, lastTimer = -1, lastCharge = -1
 
 // On ne touche le DOM que quand une valeur change : jamais à chaque frame pour rien.
 function updateHud() {
@@ -289,6 +311,8 @@ function updateHud() {
   }
   const d = Math.round(state.dist)
   if (d !== lastDist) { elDist.textContent = d; lastDist = d }
+  const ch = Math.round(state.charge * 20)
+  if (ch !== lastCharge) { elChargeBar.style.width = ch * 5 + '%'; lastCharge = ch }
   const left = Math.max(0, Math.ceil(TUNING.RUN_TIME - state.t))
   if (left !== lastTimer) {
     elTimer.textContent = left

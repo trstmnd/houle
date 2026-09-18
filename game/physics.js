@@ -22,6 +22,12 @@ export const TUNING = {
   // Vol et réception
   STICK: 3.2,           // combien de g les jambes encaissent avant que le sol lâche : sans ce terme,
                         // la moindre bosse catapulte, un skieur absorbe et reste collé
+  // Saut à la Dune : maintenir plaque le skieur dans la courbe et charge, lâcher détend.
+  PRESS_MULT: 1.9,      // gravité multipliée tant qu'on maintient : on plonge dans la pente
+  PRESS_STICK: 3.0,     // et on ne décolle pas tout seul, même sur une bosse : on attend la lèvre
+  JUMP_POP: 6.2,        // m/s vers le haut à pleine charge
+  JUMP_MIN: 0.3,        // fraction du pop sans charge : un petit saut reste possible
+  JUMP_CHARGE: 0.5,     // s pour charger à fond
   AIR_STEER: 0.6,       // le cap répond moins bien en l'air qu'au sol
   TAKEOFF_GRACE: 0.06,  // s sans test de contact après le décollage
   LAND_PERFECT: 0.22,   // rad
@@ -107,6 +113,7 @@ export function createState(seed) {
     lean: 0,                       // inclinaison lissée du skieur, pour le rendu
     grounded: true,
     airTime: 0,
+    press: false, wasPress: false, charge: 0,
     jumpX: 0, jumpZ: 0, lastJump: 0, bestJump: 0,
     wipe: 0,                       // temps de chute restant
     dist: 0,                       // mètres descendus
@@ -130,6 +137,17 @@ export function step(state, dt) {
   if (state.wipe > 0) {
     state.wipe -= dt
     state.steer = 0                // pendant la chute, le doigt ne sert à rien
+    state.press = false
+  }
+
+  // La détente part au relâcher, pas à l'appui : c'est le timing qui fait le saut.
+  if (state.wasPress && !state.press && state.grounded && state.wipe <= 0) pop(state)
+  state.wasPress = state.press
+
+  if (state.grounded && state.press) {
+    state.charge = Math.min(1, state.charge + dt / TUNING.JUMP_CHARGE)
+  } else if (!state.press) {
+    state.charge -= state.charge * (1 - Math.exp(-6 * dt))
   }
 
   if (state.grounded) stepGround(state, dt)
@@ -148,7 +166,8 @@ function stepGround(state, dt) {
   const inv = 1 / Math.sqrt(1 + hd * hd)
 
   let s = state.s
-  s += -T.G * hd * inv * dt                 // la gravité pousse dans la pente
+  const gEff = T.G * (state.press ? T.PRESS_MULT : 1)
+  s += -gEff * hd * inv * dt                // la gravité pousse dans la pente, doublée si on plaque
   const deep = Math.abs(state.x) > T.TRACK_HALF ? T.DEEP_DRAG : 0
   s -= (T.FRICTION + T.EDGE_DRAG * Math.abs(state.steer) + deep) * s * dt
   s -= T.AIR_DRAG * s * s * dt
@@ -177,13 +196,27 @@ function stepGround(state, dt) {
   // Courbure du sol le long du cap : positive sur un dos de bosse.
   const hdd = ng.hxx * ndx * ndx + 2 * ng.hxz * ndx * ndz + ng.hzz * ndz * ndz
   const kappa = -hdd / Math.pow(1 + nhd * nhd, 1.5)
-  if (kappa > 0 && s * s * kappa > T.G * T.STICK * ninv) {
+  const colle = T.STICK * (state.press ? T.PRESS_STICK : 1)
+  if (kappa > 0 && s * s * kappa > T.G * colle * ninv) {
     state.grounded = false
     state.airTime = 0
     state.jumpX = state.x                 // d'où on est parti : la longueur du saut se mesure à l'arrivée
     state.jumpZ = state.z
     state.events.push('takeoff')
   }
+}
+
+// La détente : une impulsion vers le haut qui s'ajoute à la vitesse tangentielle déjà là.
+// Lâchée sur la lèvre d'une bosse, elle s'additionne à ce que la courbure donne déjà.
+function pop(state) {
+  const T = TUNING
+  state.vy += T.JUMP_POP * (T.JUMP_MIN + (1 - T.JUMP_MIN) * state.charge)
+  state.grounded = false
+  state.airTime = 0
+  state.jumpX = state.x
+  state.jumpZ = state.z
+  state.charge = 0
+  state.events.push('takeoff')
 }
 
 function stepAir(state, dt) {
