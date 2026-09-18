@@ -36,7 +36,7 @@ export function init(canvas) {
 
   camera = new THREE.PerspectiveCamera(TUNING.FOV_BASE, 1, 0.5, 900)
 
-  scene.add(new THREE.HemisphereLight(0xEAF4FF, 0x7E93A8, 1.15))
+  scene.add(new THREE.HemisphereLight(0xEAF4FF, 0x8AA0B4, 1.3))
   const sun = new THREE.DirectionalLight(SUN, 1.35)
   sun.position.set(-0.6, 1, 0.45)
   scene.add(sun)
@@ -160,7 +160,7 @@ function updateTerrain(state) {
     // Pente forte : la neige ne tient pas, c'est de la roche. Creux : neige bleue à l'ombre.
     const steep = Math.hypot(g.hx, g.hz - TUNING.SLOPE)
     const rock = clamp01((steep - 0.7) / 0.45)
-    const shade = clamp01((g.hz - TUNING.SLOPE) * 2.2 + 0.15) * (1 - rock)
+    const shade = clamp01((g.hz - TUNING.SLOPE) * 1.8 + 0.08) * (1 - rock)
     const snow = 1 - rock - shade
     col[c] = cSnow.r * snow + cShade.r * shade + cRock.r * rock
     col[c + 1] = cSnow.g * snow + cShade.g * shade + cRock.g * rock

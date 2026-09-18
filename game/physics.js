@@ -88,7 +88,7 @@ export function createState(seed) {
   return {
     phase: 'title',
     seed, terrain: ter,
-    t: 0,
+    t: 0, ending: false,
     x: 0, y: g.y, z: 0,
     vx: 0, vy: 0, vz: 0,
     s: TUNING.START_SPEED,
@@ -110,6 +110,11 @@ export function createState(seed) {
 export function step(state, dt) {
   if (state.phase !== 'run') return
   state.t += dt
+  // Le chrono à zéro n'interrompt pas un saut : le dernier vol compte jusqu'à la réception.
+  if (state.t >= TUNING.RUN_TIME) {
+    if (state.grounded) return finish(state)
+    state.ending = true
+  }
 
   if (state.wipe > 0) {
     state.wipe -= dt
@@ -220,6 +225,13 @@ function land(state, g) {
   state.grounded = true
   state.y = g.y
   state.vy = 0
+  if (state.ending) finish(state)
+}
+
+function finish(state) {
+  state.phase = 'end'
+  state.steer = 0
+  state.events.push('end')
 }
 
 // La caméra vit dans state : render.js ne fait que la lire.
