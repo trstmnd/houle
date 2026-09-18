@@ -10,7 +10,7 @@ const RAMP = 0xF08A2B
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps
+let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow
 const ramp = { x: 0, y: 0, z: 0 }
 let rampFirst = NaN
 let originX = NaN, originZ = NaN      // case du réseau sur laquelle la grille est calée
@@ -21,6 +21,8 @@ const look = { x: 0, y: 0, z: 0 }
 const tmpObj = new THREE.Object3D()   // réutilisé pour poser les fanions, rien ne s'alloue par frame
 
 const NX = TUNING.GRID_NX, NZ = TUNING.GRID_NZ, CELL = TUNING.CELL
+const W = NX + 1                      // sommets par rangée
+const heights = new Float32Array((NX + 1) * (NZ + 1))
 const FLAG_EVERY = 14                 // m entre deux fanions d'une rangée
 const FLAG_N = 30                     // fanions par rangée
 const TREE_LANES = 9                  // cases de part et d'autre de la piste
@@ -54,8 +56,11 @@ export function init(canvas) {
   colAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3)
   geo.setAttribute('color', colAttr)
   copyColor(SNOW, cSnow); copyColor(SNOW_SHADE, cShade); copyColor(ROCK, cRock)
+  const span = Math.max(NX, NZ) * CELL
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), span)
   terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }))
   scene.add(terrainMesh)
+  window.__terrainMesh = terrainMesh   // poignée de debug : comparer la grille au terrain réel
 
   skier = new THREE.Group()
   skierBody = new THREE.Group()
@@ -78,6 +83,14 @@ export function init(canvas) {
   skierBody.add(torso, head, skiL, skiR, legL, legR, armL, armR)
   skier.add(skierBody)
   scene.add(skier)
+
+  // Ombre de contact : trois lignes, et le skieur cesse de flotter au-dessus de la neige.
+  shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.15, 14),
+    new THREE.MeshBasicMaterial({ color: 0x33506B, transparent: true, opacity: 0.32, depthWrite: false }),
+  )
+  shadow.rotation.x = -Math.PI / 2
+  scene.add(shadow)
 
   flagsL = makeFlagRow(FLAG_L)
   flagsR = makeFlagRow(FLAG_R)
@@ -142,6 +155,14 @@ export function draw(state, dt) {
   skierBody.rotation.z = state.lean * 0.55
   skierBody.rotation.x = 0.12 + 0.25 * (state.s / TUNING.MAX_SPEED) + (state.wipe > 0 ? 0.9 : 0)
 
+  // L'ombre reste au sol et s'estompe avec la hauteur : c'est elle qui dit où on va retomber.
+  const gy = state.terrain.height(state.x, state.z)
+  const air = state.y - gy
+  shadow.position.set(state.x, gy + 0.06, state.z)
+  const k = 1 / (1 + air * 0.09)
+  shadow.scale.setScalar(0.75 + k * 0.45)
+  shadow.material.opacity = 0.34 * k
+
   const cam = state.cam
   camera.position.set(cam.x, cam.y, cam.z)
   lookAt(state, look)
@@ -155,32 +176,106 @@ export function draw(state, dt) {
   renderer.render(scene, camera)
 }
 
-// Les hauteurs ne sont recalculées que quand la grille change de case : quelques fois par seconde.
+// La grille est calée sur un réseau fixe. Quand elle change de case, on ne la recalcule pas :
+// on la fait glisser d'une rangée ou d'une colonne, et on ne calcule que la ligne qui entre.
+// Une reconstruction complète coûte 19 000 appels de terrain, un glissement en coûte 170.
 function updateTerrain(state) {
   const ox = Math.round(state.x / CELL) * CELL
   const oz = Math.round((state.z - NZ * CELL * 0.25) / CELL) * CELL
   if (ox === originX && oz === originZ) return
-  originX = ox; originZ = oz
-  terrainMesh.position.set(ox, 0, oz)
 
-  const arr = posAttr.array
-  const col = colAttr.array
-  const ter = state.terrain
-  for (let i = 0, c = 0; i < arr.length; i += 3, c += 3) {
-    const g = ter.sample(ox + arr[i], oz + arr[i + 2])
-    arr[i + 1] = g.y
-    // Pente forte : la neige ne tient pas, c'est de la roche. Creux : neige bleue à l'ombre.
-    const steep = Math.hypot(g.hx, g.hz - TUNING.SLOPE)
-    const rock = clamp01((steep - 0.7) / 0.45)
-    const shade = clamp01((g.hz - TUNING.SLOPE) * 1.8 + 0.08) * (1 - rock)
-    const snow = 1 - rock - shade
-    col[c] = cSnow.r * snow + cShade.r * shade + cRock.r * rock
-    col[c + 1] = cSnow.g * snow + cShade.g * shade + cRock.g * rock
-    col[c + 2] = cSnow.b * snow + cShade.b * shade + cRock.b * rock
+  const dix = Number.isNaN(originX) ? 99 : Math.round((ox - originX) / CELL)
+  const diz = Number.isNaN(originZ) ? 99 : Math.round((oz - originZ) / CELL)
+
+  if (Math.abs(dix) + Math.abs(diz) > 8) {
+    originX = ox
+    originZ = oz
+    rebuild(state)
+  } else {
+    // Une case à la fois, en avançant l'origine à chaque pas : la rangée qui entre doit être
+    // calculée à sa vraie position, pas à celle d'arrivée.
+    const sz = Math.sign(diz), sx = Math.sign(dix)
+    for (let k = 0; k < Math.abs(diz); k++) { originZ += sz * CELL; rollZ(state, sz) }
+    for (let k = 0; k < Math.abs(dix); k++) { originX += sx * CELL; rollX(state, sx) }
+    originX = ox
+    originZ = oz
+  }
+  terrainMesh.position.set(ox, 0, oz)
+  writeGrid()
+}
+
+function worldX(ix) { return originX + ix * CELL - NX * CELL * 0.5 }
+function worldZ(iz) { return originZ + iz * CELL - NZ * CELL * 0.5 }
+
+function rebuild(state) {
+  const h = state.terrain.height
+  for (let iz = 0; iz <= NZ; iz++) {
+    const z = worldZ(iz), base = iz * W
+    for (let ix = 0; ix <= NX; ix++) heights[base + ix] = h(worldX(ix), z)
+  }
+}
+
+// L'origine descend d'une case : chaque rangée prend la hauteur de sa voisine, une seule est neuve.
+function rollZ(state, dir) {
+  const h = state.terrain.height
+  if (dir < 0) {
+    heights.copyWithin(W, 0, NZ * W)
+    const z = worldZ(0)
+    for (let ix = 0; ix <= NX; ix++) heights[ix] = h(worldX(ix), z)
+  } else {
+    heights.copyWithin(0, W, (NZ + 1) * W)
+    const z = worldZ(NZ), base = NZ * W
+    for (let ix = 0; ix <= NX; ix++) heights[base + ix] = h(worldX(ix), z)
+  }
+}
+
+function rollX(state, dir) {
+  const h = state.terrain.height
+  if (dir > 0) {
+    heights.copyWithin(0, 1)
+    const x = worldX(NX)
+    for (let iz = 0; iz <= NZ; iz++) heights[iz * W + NX] = h(x, worldZ(iz))
+  } else {
+    heights.copyWithin(1, 0, heights.length - 1)
+    const x = worldX(0)
+    for (let iz = 0; iz <= NZ; iz++) heights[iz * W] = h(x, worldZ(iz))
+  }
+}
+
+// Hauteurs et couleurs versées dans la géométrie. La pente vient de la grille elle-même,
+// par différence finie : les dérivées analytiques ne servent à rien pour colorier.
+function writeGrid() {
+  const pos = posAttr.array, col = colAttr.array
+  const inv2 = 1 / (2 * CELL)
+  for (let iz = 0; iz <= NZ; iz++) {
+    const base = iz * W
+    const up = (iz > 0 ? iz - 1 : iz) * W
+    const dn = (iz < NZ ? iz + 1 : iz) * W
+    for (let ix = 0; ix <= NX; ix++) {
+      const i = base + ix
+      const y = heights[i]
+      pos[i * 3 + 1] = y
+      const l = ix > 0 ? heights[i - 1] : y
+      const r = ix < NX ? heights[i + 1] : y
+      const hx = (r - l) * inv2
+      const hz = (heights[dn + ix] - heights[up + ix]) * inv2
+      // Pente forte : la neige ne tient pas, c'est de la roche. Creux : neige bleue à l'ombre.
+      // Math.hypot et clamp01 sont inlinés : cette boucle tourne 19 000 fois par franchissement.
+      const dz = hz - TUNING.SLOPE
+      const steep = Math.sqrt(hx * hx + dz * dz)
+      let rock = (steep - 0.7) / 0.45
+      rock = rock < 0 ? 0 : (rock > 1 ? 1 : rock)
+      let shade = dz * 1.8 + 0.08
+      shade = (shade < 0 ? 0 : (shade > 1 ? 1 : shade)) * (1 - rock)
+      const snow = 1 - rock - shade
+      const c = i * 3
+      col[c] = cSnow.r * snow + cShade.r * shade + cRock.r * rock
+      col[c + 1] = cSnow.g * snow + cShade.g * shade + cRock.g * rock
+      col[c + 2] = cSnow.b * snow + cShade.b * shade + cRock.b * rock
+    }
   }
   posAttr.needsUpdate = true
   colAttr.needsUpdate = true
-  geo.computeBoundingSphere()
 }
 
 function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v) }

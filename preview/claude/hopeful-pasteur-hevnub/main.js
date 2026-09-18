@@ -136,7 +136,7 @@ document.getElementById('btn-share').addEventListener('pointerdown', (e) => {
   e.stopPropagation()
   const url = location.href
   const toast = document.getElementById('toast')
-  if (navigator.share) { navigator.share({ title: 'Houle', url }).catch(() => {}); return }
+  if (navigator.share) { navigator.share({ title: 'Ski 3000', url }).catch(() => {}); return }
   if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {})
   toast.hidden = false
   setTimeout(() => { toast.hidden = true }, 1500)
