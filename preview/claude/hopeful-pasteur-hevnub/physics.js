@@ -13,11 +13,20 @@ export const TUNING = {
   MIN_SPEED: 2,
   START_SPEED: 12,
   TURN_RATE: 1.1,       // rad/s à pleine carre
+  CROSS_TURN: 0.55,     // une pente latérale fait tourner le skieur vers le bas : sans ce terme,
+                        // la cuvette et les dévers ne servent à rien, on les traverse sans les sentir
   FALL_ALIGN: 1.4,      // /s, rappel du cap vers l axe de la piste quand la carre est lâchée
   EDGE_DRAG: 0.45,      // /s à steer = 1 : virer coûte, c'est tout l'arbitrage du jeu
   FRICTION: 0.06,       // /s, neige damée
   AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
   DEEP_DRAG: 0.4,       // /s hors piste : un coût, pas un mur
+  // La piste serpente et se creuse en cuvette : ce sont ses bords qui te ramènent dedans.
+  TRACK_BEND1: 46,      // m, amplitude du grand lacet
+  TRACK_LEN1: 700,      // m, sa longueur d'onde
+  TRACK_BEND2: 15,      // m, le petit lacet par-dessus
+  TRACK_LEN2: 290,
+  BANK_H: 14,           // m, relevé maximal des bords, atteint loin de la piste
+  BANK_W: 55,           // m, largeur de la remontée. Plafonnée, sinon on creuse un canyon
   TRACK_HALF: 45,       // m, demi-largeur : plus étroit, un virage tenu sort de la piste en 5 s
 
   // Vol et réception
@@ -180,16 +189,17 @@ function stepGround(state, dt) {
   let s = state.s
   const gEff = T.G * (state.press ? T.PRESS_MULT : 1)
   s += -gEff * hd * inv * dt                // la gravité pousse dans la pente, doublée si on plaque
-  const deep = Math.abs(state.x) > T.TRACK_HALF ? T.DEEP_DRAG : 0
+  const deep = Math.abs(state.x - state.terrain.centre(state.z)) > T.TRACK_HALF ? T.DEEP_DRAG : 0
   s -= (T.FRICTION + T.EDGE_DRAG * Math.abs(state.steer) + deep) * s * dt
   s -= T.AIR_DRAG * s * s * dt
   s = clamp(s, T.MIN_SPEED, T.MAX_SPEED)
 
   state.heading += state.steer * T.TURN_RATE * dt
   // La pente ramène le skieur dans l'axe quand il lâche la carre. Sans ça, un doigt ne suffit pas :
-  // on part en travers et on ne revient jamais. C'est l'axe de la piste, pas la pente locale : suivre
-  // les vaguelettes ferait dériver le skieur hors piste en ligne droite.
-  state.heading -= wrapAngle(state.heading) * T.FALL_ALIGN * (1 - Math.abs(state.steer)) * dt
+  // on part en travers et on ne revient jamais. L'axe visé est la tangente de la piste, qui
+  // serpente : lâcher la carre suit la courbe, ce qui est exactement ce qu'on veut sentir.
+  const axe = Math.atan(-state.terrain.centreSlope(state.z))
+  state.heading -= wrapAngle(state.heading - axe) * T.FALL_ALIGN * (1 - Math.abs(state.steer)) * dt
   const ndx = Math.sin(state.heading), ndz = -Math.cos(state.heading)
   state.x += s * ndx * dt
   state.z += s * ndz * dt
@@ -203,6 +213,11 @@ function stepGround(state, dt) {
   state.vx = s * ndx * ninv
   state.vy = s * nhd * ninv
   state.vz = s * ndz * ninv
+
+  // Le dévers pousse vers le bas : c'est ce qui donne du sens aux bords relevés de la piste.
+  const rx = Math.cos(state.heading), rz = Math.sin(state.heading)
+  const devers = ng.hx * rx + ng.hz * rz    // positif si le terrain monte à droite du skieur
+  state.heading -= T.G * devers * T.CROSS_TURN / Math.max(s, 6) * dt
 
   if (state.wipe > 0) return                // on ne décolle pas pendant une chute
   // Courbure du sol le long du cap : positive sur un dos de bosse.
