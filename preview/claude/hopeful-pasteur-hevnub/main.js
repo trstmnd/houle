@@ -15,6 +15,8 @@ const elSpeedBar = document.getElementById('speed-bar')
 const elDist = document.getElementById('dist')
 const elTimer = document.getElementById('timer')
 const elFlash = document.getElementById('flash')
+const elJump = document.getElementById('jump')
+const elJumpLen = document.getElementById('jump-len')
 
 function readSeed() {
   const raw = new URLSearchParams(location.search).get('seed')
@@ -168,19 +170,30 @@ function updateSteer(dt) {
   else state.steer -= state.steer * (1 - Math.exp(-dt / T.STEER_RETURN))
 }
 
-let flashTimer = 0
+let flashTimer = 0, jumpTimer = 0
 
 function drain() {
   const events = state.events
   for (let i = 0; i < events.length; i++) {
     const e = events[i]
     render.fx(e, state)
-    audio.play(e, 0)
+    audio.play(e)
     if (e === 'wipe') flash(true)
     else if (e === 'land_flat') flash(false)
     else if (e === 'end') endRun()
+    else if (e === 'jump_short' || e === 'jump_mid' || e === 'jump_long') showJump(e)
   }
   events.length = 0
+}
+
+// L'animation CSS ne repart que si l'élément est retiré du flux entre deux sauts.
+function showJump(kind) {
+  elJumpLen.textContent = Math.round(state.lastJump)
+  elJump.classList.toggle('long', kind === 'jump_long')
+  elJump.hidden = true
+  void elJump.offsetWidth
+  elJump.hidden = false
+  jumpTimer = 0.9
 }
 
 function flash(bad) {
@@ -221,6 +234,7 @@ function frame(now) {
 
   if (inputLock > 0) inputLock -= dt
   if (flashTimer > 0) { flashTimer -= dt; if (flashTimer <= 0) elFlash.classList.remove('on') }
+  if (jumpTimer > 0) { jumpTimer -= dt; if (jumpTimer <= 0) elJump.hidden = true }
 
   if (!paused && state.phase === 'run') {
     updateSteer(dt)
@@ -229,6 +243,7 @@ function frame(now) {
     drain()
     updateHud()
   }
+  audio.setWind(state.s / TUNING.MAX_SPEED, !state.grounded)
   render.draw(state, dt)
 }
 

@@ -6,10 +6,13 @@ import { TUNING, lookAt } from './physics.js'
 const SKY_TOP = 0x2F7BC4, SKY_LOW = 0xCFE8F7, FOG = 0xCFE8F7
 const SNOW = 0xFDFDFF, SNOW_SHADE = 0x7FA6CE, ROCK = 0x6E6357
 const PINE = 0x27443A, TRUNK = 0x4A3524, SUN = 0xFFF6E2
+const RAMP = 0xF08A2B
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, flagsL, flagsR, pines, trunks, sky
+let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps
+const ramp = { x: 0, y: 0, z: 0 }
+let rampFirst = NaN
 let originX = NaN, originZ = NaN      // case du réseau sur laquelle la grille est calée
 let treeRow = NaN
 const tree = { x: 0, y: 0, z: 0, scale: 1, show: false }
@@ -23,6 +26,8 @@ const FLAG_N = 30                     // fanions par rangée
 const TREE_LANES = 9                  // cases de part et d'autre de la piste
 const TREE_ROWS = 26                  // cases devant le skieur
 const TREE_N = (2 * TREE_LANES + 1) * TREE_ROWS
+const RAMP_N = 4          // tremplins balisés devant le skieur
+const RAMP_POSTS = 2      // un piquet de chaque côté de la table
 
 export function init(canvas) {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -85,6 +90,12 @@ export function init(canvas) {
   trunkGeo.translate(0, 0.8, 0)
   trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: TRUNK }), TREE_N)
   scene.add(pines, trunks)
+
+  // Balises de tremplin : on doit le voir venir pour viser, sinon le saut est subi.
+  const postGeo = new THREE.BoxGeometry(0.5, 3.2, 0.5)
+  postGeo.translate(0, 1.6, 0)
+  ramps = new THREE.InstancedMesh(postGeo, new THREE.MeshLambertMaterial({ color: RAMP }), RAMP_N * RAMP_POSTS)
+  scene.add(ramps)
 }
 
 // Ciel : une sphère vue de l'intérieur, dégradée du zénith à l'horizon. Aucun asset, 12 lignes.
@@ -122,6 +133,7 @@ export function resize(w, h, dpr) {
 export function draw(state, dt) {
   updateTerrain(state)
   updateTrees(state)
+  updateRamps(state)
   updateFlags(state)
 
   skier.position.set(state.x, state.y, state.z)
@@ -220,6 +232,24 @@ function updateFlags(state) {
   }
   flagsL.instanceMatrix.needsUpdate = true
   flagsR.instanceMatrix.needsUpdate = true
+}
+
+// Les piquets ne bougent qu'au passage d'un tremplin, pas à chaque frame.
+function updateRamps(state) {
+  const first = Math.round(-state.z / TUNING.JUMP_GAP)
+  if (first === rampFirst) return
+  rampFirst = first
+  const ter = state.terrain
+  for (let i = 0; i < RAMP_N; i++) {
+    ter.jump(first + i, ramp)
+    for (let s = 0; s < RAMP_POSTS; s++) {
+      tmpObj.position.set(ramp.x + (s === 0 ? -TUNING.JUMP_WX : TUNING.JUMP_WX), ramp.y - 1.4, ramp.z)
+      tmpObj.updateMatrix()
+      ramps.setMatrixAt(i * RAMP_POSTS + s, tmpObj.matrix)
+    }
+  }
+  ramps.instanceMatrix.needsUpdate = true
+  ramps.computeBoundingSphere()
 }
 
 /** Effet déclenché par un événement de state.events. */
