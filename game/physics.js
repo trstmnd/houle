@@ -80,6 +80,8 @@ export const TUNING = {
   CAM_BACK: 8.5,
   CAM_UP: 3.6,
   CAM_RATE: 6,          // /s, lissage
+  CAM_ROLL: 0.16,       // rad d'inclinaison de la caméra à pleine carre : l'horizon penche dans le virage
+  CAM_ROLL_RATE: 4,     // /s, lissage de cette inclinaison
   CAM_LOOK: 20,         // m devant le skieur
   FOV_BASE: 62,
   FOV_FAST: 88,
@@ -124,7 +126,7 @@ export function createState(seed) {
     score: 0, chain: 0, mult: 1,
     gates: [], gatesUpto: 0, lastGate: null,
     events: [],
-    cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE },
+    cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE, roll: 0 },
   }
   gates.create(state)
   return state
@@ -305,6 +307,11 @@ function stepCamera(state, dt) {
   cam.x += (state.x - dx * T.CAM_BACK - cam.x) * k
   cam.y += (state.y + T.CAM_UP - cam.y) * k
   cam.z += (state.z - dz * T.CAM_BACK - cam.z) * k
+  // L'horizon penche dans le virage. C'est faux physiquement et c'est exactement ce que font les
+  // jeux de glisse arcade : le virage se sent avant de se voir.
+  const roll = -state.lean * T.CAM_ROLL
+  cam.roll += (roll - cam.roll) * (1 - Math.exp(-T.CAM_ROLL_RATE * dt))
+
   // Le champ de vision s'ouvre avec la vitesse : le meilleur retour de vitesse qui existe.
   // La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
   const sol = state.terrain.height(cam.x, cam.z) + T.CAM_CLEAR

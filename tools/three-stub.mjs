@@ -73,7 +73,7 @@ export class WebGLRenderer {
 }
 export class Scene extends Obj3D {}
 export class PerspectiveCamera extends Obj3D {
-  constructor(fov = 50) { super(); this.fov = fov; this.aspect = 1 }
+  constructor(fov = 50) { super(); this.fov = fov; this.aspect = 1; this.up = new Vec3(0, 1, 0) }
   updateProjectionMatrix() {}
 }
 export class HemisphereLight extends Obj3D {}
