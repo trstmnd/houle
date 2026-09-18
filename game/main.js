@@ -75,6 +75,7 @@ let inputLock = 0   // input ignoré juste après un changement d'écran (SPEC �
 let keyLeft = false, keyRight = false, keySteer = 0
 let padSteer = 0
 let padDir = 0      // -1 ou 1 tant qu'une zone de virage est tenue
+let padTuck = false // les deux côtés tenus en même temps : position de l'œuf
 
 // Trois zones qui couvrent l'écran. On retient quel pointeur tient quelle zone : sans ça, lâcher
 // le doigt de saut annulerait le virage que l'autre doigt tient encore.
@@ -100,17 +101,19 @@ function bindZone(el, role) {
 }
 
 function appliqueZones() {
-  let dir = 0, saut = false
+  let gauche = false, droite = false, saut = false
   for (const role of tenus.values()) {
-    if (role === -1) dir = -1
-    else if (role === 1) dir = 1
+    if (role === -1) gauche = true
+    else if (role === 1) droite = true
     else saut = true
   }
-  padDir = dir
-  state.press = saut
-  zoneL.classList.toggle('on', dir === -1)
-  zoneR.classList.toggle('on', dir === 1)
-  zoneM.classList.toggle('on', saut)
+  // Les deux côtés à la fois : plus de carre, on se met en œuf et ça prend de la vitesse.
+  padTuck = gauche && droite
+  padDir = padTuck ? 0 : (gauche ? -1 : (droite ? 1 : 0))
+  state.press = saut && !padTuck
+  zoneL.classList.toggle('on', gauche)
+  zoneR.classList.toggle('on', droite)
+  zoneM.classList.toggle('on', state.press)
 }
 
 function relacheTout() {
@@ -225,6 +228,10 @@ function updateSteer(dt) {
   if (padDir !== 0 || Math.abs(padSteer) > 0.001) state.steer = padSteer
   else if (dir !== 0 || Math.abs(keySteer) > 0.001) state.steer = keySteer
   else state.steer -= state.steer * (1 - Math.exp(-dt / T.STEER_RETURN))
+
+  // Au clavier comme au doigt, les deux côtés ensemble mettent en œuf.
+  state.tuck = padTuck || (keyLeft && keyRight)
+  if (state.tuck) state.press = false     // en œuf, les mains sont sur les genoux : pas de saut
 }
 
 let flashTimer = 0, jumpTimer = 0
@@ -237,6 +244,7 @@ const TUTO = [
   { texte: 'Vise les piquets orange : ce sont les tremplins', fait: (s) => !s.grounded },
   { texte: 'Tiens le milieu dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
   { texte: 'Passe entre les fanions : la chaîne multiplie', fait: (s) => s.chain > 0 },
+  { texte: 'Les deux côtés en même temps : l\'œuf, ça accélère', fait: (s) => s.tuck },
 ]
 let tutoStep = 0
 let tutoDone = readBest('ski3000:tuto') === 1
