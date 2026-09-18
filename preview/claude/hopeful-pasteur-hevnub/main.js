@@ -6,7 +6,7 @@ import * as audio from './audio.js'
 
 // Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
 // c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
-const VERSION = '0.14.0'
+const VERSION = '0.15.0'
 
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
@@ -24,9 +24,9 @@ const elFlash = document.getElementById('flash')
 const elJump = document.getElementById('jump')
 const elJumpLen = document.getElementById('jump-len')
 const pads = document.getElementById('pads')
-const padL = document.getElementById('pad-l')
-const padR = document.getElementById('pad-r')
-const padJump = document.getElementById('pad-jump')
+const zoneL = document.getElementById('zone-l')
+const zoneM = document.getElementById('zone-m')
+const zoneR = document.getElementById('zone-r')
 const elChargeBar = document.getElementById('charge-bar')
 const elTuto = document.getElementById('tuto')
 const elTutoText = document.getElementById('tuto-text')
@@ -72,57 +72,62 @@ function resize() {
 
 let paused = false
 let inputLock = 0   // input ignoré juste après un changement d'écran (SPEC §7)
-let pointerId = -1, pointerOrigin = 0, pointerSteer = 0
 let keyLeft = false, keyRight = false, keySteer = 0
 let padSteer = 0
-let padDir = 0      // -1 ou 1 tant qu'une grosse touche est tenue
+let padDir = 0      // -1 ou 1 tant qu'une zone de virage est tenue
 
-// Les grosses touches servent la souris autant que le pouce : tenir, pas cliquer.
-function bindPad(el, dir) {
-  const on = (e) => {
+// Trois zones qui couvrent l'écran. On retient quel pointeur tient quelle zone : sans ça, lâcher
+// le doigt de saut annulerait le virage que l'autre doigt tient encore.
+const tenus = new Map()
+
+function bindZone(el, role) {
+  el.addEventListener('pointerdown', (e) => {
     e.preventDefault()
     e.stopPropagation()
+    audio.init()
     startRun()
-    padDir = dir
-    el.classList.add('on')
-    el.setPointerCapture && e.pointerId !== undefined && el.setPointerCapture(e.pointerId)
-  }
-  const off = (e) => {
+    tenus.set(e.pointerId, role)
+    appliqueZones()
+    if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId) } catch (err) { /* sans capture, tant pis */ } }
+  })
+  const fin = (e) => {
     e.stopPropagation()
-    if (padDir === dir) padDir = 0
-    el.classList.remove('on')
+    tenus.delete(e.pointerId)
+    appliqueZones()
   }
-  el.addEventListener('pointerdown', on)
-  el.addEventListener('pointerup', off)
-  el.addEventListener('pointercancel', off)
-  el.addEventListener('pointerleave', off)
+  el.addEventListener('pointerup', fin)
+  el.addEventListener('pointercancel', fin)
 }
-bindPad(padL, -1)
-bindPad(padR, 1)
 
-// La touche de saut ne dirige pas : elle plaque tant qu'on tient, et détend au relâcher.
-padJump.addEventListener('pointerdown', (e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  audio.init()
-  startRun()
-  state.press = true
-  padJump.classList.add('on')
-})
-function releaseJump(e) {
-  if (e) e.stopPropagation()
-  state.press = false
-  padJump.classList.remove('on')
+function appliqueZones() {
+  let dir = 0, saut = false
+  for (const role of tenus.values()) {
+    if (role === -1) dir = -1
+    else if (role === 1) dir = 1
+    else saut = true
+  }
+  padDir = dir
+  state.press = saut
+  zoneL.classList.toggle('on', dir === -1)
+  zoneR.classList.toggle('on', dir === 1)
+  zoneM.classList.toggle('on', saut)
 }
-padJump.addEventListener('pointerup', releaseJump)
-padJump.addEventListener('pointercancel', releaseJump)
-padJump.addEventListener('pointerleave', releaseJump)
+
+function relacheTout() {
+  tenus.clear()
+  appliqueZones()
+}
+
+bindZone(zoneL, -1)
+bindZone(zoneM, 0)
+bindZone(zoneR, 1)
 
 function startRun() {
   if (state.phase !== 'title' || inputLock > 0) return
   state.phase = 'run'
   titleScreen.hidden = true
   hud.hidden = false
+  document.body.classList.add('playing')
   tutoStep = tutoDone ? -1 : 0
   showTuto()
 }
@@ -138,6 +143,7 @@ function endRun() {
   hud.hidden = true            // la carte de fin recouvre le HUD, autant le retirer
   pads.hidden = true
   elTuto.hidden = true
+  document.body.classList.remove('playing')
   inputLock = TUNING.INPUT_LOCK
 }
 
@@ -153,6 +159,7 @@ function restart(newSeed) {
   endScreen.hidden = true
   hud.hidden = false
   pads.hidden = false
+  document.body.classList.add('playing')
   inputLock = TUNING.INPUT_LOCK
   lastSpeed = lastDist = lastTimer = -1
   acc = 0
@@ -174,39 +181,17 @@ document.getElementById('btn-share').addEventListener('pointerdown', (e) => {
   setTimeout(() => { toast.hidden = true }, 1500)
 })
 
-canvas.addEventListener('pointerdown', (e) => {
-  audio.init()                       // iOS refuse le son hors d'un geste
-  startRun()
-  if (pointerId !== -1) return
-  pointerId = e.pointerId
-  pointerOrigin = e.clientX
-  pointerSteer = 0
-})
-
-canvas.addEventListener('pointermove', (e) => {
-  if (e.pointerId !== pointerId) return
-  // Le glissement horizontal depuis le point de contact donne la carre.
-  pointerSteer = clamp((e.clientX - pointerOrigin) / TUNING.STEER_SPAN, -1, 1)
-})
-
-function endPointer(e) {
-  if (e.pointerId !== pointerId) return
-  pointerId = -1
-  pointerSteer = 0
-}
-canvas.addEventListener('pointerup', endPointer)
-canvas.addEventListener('pointercancel', endPointer)
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keyLeft = true; e.preventDefault(); startRun() }
   if (e.code === 'ArrowRight' || e.code === 'KeyD') { keyRight = true; e.preventDefault(); startRun() }
-  if (e.code === 'Space') { e.preventDefault(); startRun(); state.press = true; padJump.classList.add('on') }
+  if (e.code === 'Space') { e.preventDefault(); startRun(); state.press = true; zoneM.classList.add('on') }
 })
 window.addEventListener('keyup', (e) => {
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') keyLeft = false
   if (e.code === 'ArrowRight' || e.code === 'KeyD') keyRight = false
-  if (e.code === 'Space') releaseJump()
+  if (e.code === 'Space') { state.press = false; zoneM.classList.remove('on') }
 })
 
 function pause() { paused = true; audio.suspend() }
@@ -217,7 +202,7 @@ function unpause() {
   acc = 0
   audio.resume()
 }
-window.addEventListener('blur', () => { pointerId = -1; pointerSteer = 0; keyLeft = keyRight = false; releaseJump(); pause() })
+window.addEventListener('blur', () => { keyLeft = keyRight = false; relacheTout(); pause() })
 window.addEventListener('focus', unpause)
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else unpause() })
 window.addEventListener('contextmenu', (e) => e.preventDefault())
@@ -236,9 +221,8 @@ function updateSteer(dt) {
   if (padDir !== 0) padSteer = clamp(padSteer + padDir * dt / T.KEY_RAMP, -1, 1)
   else padSteer -= padSteer * (1 - Math.exp(-dt / T.STEER_RETURN))
 
-  // Le doigt sur la piste gagne, puis les grosses touches, puis le clavier.
-  if (pointerId !== -1) state.steer = pointerSteer
-  else if (padDir !== 0 || Math.abs(padSteer) > 0.001) state.steer = padSteer
+  // Les zones gagnent sur le clavier, et la carre revient toujours à zéro toute seule.
+  if (padDir !== 0 || Math.abs(padSteer) > 0.001) state.steer = padSteer
   else if (dir !== 0 || Math.abs(keySteer) > 0.001) state.steer = keySteer
   else state.steer -= state.steer * (1 - Math.exp(-dt / T.STEER_RETURN))
 }
@@ -247,11 +231,11 @@ let flashTimer = 0, jumpTimer = 0
 
 // Didacticiel : une étape à la fois, chacune attend son geste. Jamais de texte qu'on ne peut pas faire disparaître.
 const TUTO = [
-  { texte: 'Tiens une touche, ou glisse le doigt', fait: (s) => Math.abs(s.steer) > 0.35 },
+  { texte: 'Tiens à gauche ou à droite pour virer', fait: (s) => Math.abs(s.steer) > 0.35 },
   { texte: 'Lâche : le skieur revient dans l\'axe', fait: (s) => Math.abs(s.steer) < 0.05 && s.t > 3 },
   { texte: 'Virer freine. Tout droit, ça va vite', fait: (s) => s.s > 22 },
   { texte: 'Vise les piquets orange : ce sont les tremplins', fait: (s) => !s.grounded },
-  { texte: 'Tiens espace dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
+  { texte: 'Tiens le milieu dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
   { texte: 'Passe entre les fanions : la chaîne multiplie', fait: (s) => s.chain > 0 },
 ]
 let tutoStep = 0

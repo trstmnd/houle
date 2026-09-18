@@ -123,55 +123,77 @@ html, body {
 .flash.on { opacity: 0.5; transition: none; }
 .flash.bad { background: var(--danger); }
 
-/* Grosses touches : au pouce sur téléphone, à la souris sur ordinateur. Dans les coins bas,
-   là où le pouce vit, et assez larges pour être touchées sans viser. */
+/* Trois zones qui couvrent tout l'écran : la moitié gauche vire à gauche, la moitié droite vire
+   à droite, la bande du milieu saute. Pas de cible à viser, le pouce tombe forcément juste. */
 #pads {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--pad-bottom) + 16px);
+  inset: 0;
   display: flex;
-  justify-content: space-between;
-  padding: 0 16px;
   pointer-events: none;
+  z-index: 2;
 }
-.pad {
+.zone {
   pointer-events: auto;
-  width: 104px;
-  height: 104px;
+  flex: 1 1 0;
   padding: 0;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.58);
-  color: var(--ink);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 8px 24px rgba(22, 36, 46, 0.16);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-bottom: calc(var(--pad-bottom) + 26px);
+  min-height: 0;
+  position: relative;
+  transition: background 0.12s ease-out;
 }
-.pad svg { width: 42px; height: 42px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
-.pad em { font-style: normal; font-size: 12px; font-weight: 800; opacity: 0.55; }
-.pad.on { background: var(--accent); color: var(--paper); transform: scale(0.96); }
+.zone-m { flex: 0 0 26%; }
+/* Les séparations ne servent qu'à montrer les zones avant de partir. */
+.zone-l { border-right: 1px solid rgba(255, 255, 255, 0.14); }
+.zone-r { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.playing .zone-l, .playing .zone-r { border-color: transparent; }
+.chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.zone svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.tag {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  text-shadow: 0 1px 6px rgba(20, 14, 40, 0.8);
+}
+.zone.on { background: rgba(255, 255, 255, 0.12); }
+.zone.on .chev { background: var(--accent); }
 
-/* La touche de saut est au centre : les deux pouces la trouvent, et elle porte sa jauge. */
-.pad-jump { width: 96px; height: 96px; align-self: flex-end; position: relative; }
-.pad-jump svg { width: 34px; height: 34px; }
+/* Pendant la run, les zones s'effacent : elles restent actives mais ne mangent plus l'image. */
+.playing .zone .chev { background: rgba(255, 255, 255, 0.1); }
+.playing .zone .tag { opacity: 0; }
+.playing .zone.on .chev { background: var(--accent); }
+
 .gauge {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 11px;
+  left: 22%;
+  right: 22%;
+  bottom: calc(var(--pad-bottom) + 14px);
   height: 4px;
   border-radius: 2px;
-  background: rgba(22, 36, 46, 0.14);
+  background: rgba(255, 255, 255, 0.25);
   overflow: hidden;
 }
-.pad-jump.on .gauge { background: rgba(255, 255, 255, 0.35); }
 .gauge s { display: block; height: 100%; width: 0; background: var(--accent); text-decoration: none; }
-.pad-jump.on .gauge s { background: var(--paper); }
 
 /* Didacticiel : une phrase à la fois, sous le compteur, qui s'efface dès que le geste est fait. */
 #tuto {

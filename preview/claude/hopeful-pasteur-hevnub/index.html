@@ -32,18 +32,18 @@
 </div>
 
 <div id="pads">
-  <button class="pad pad-l" id="pad-l" type="button" aria-label="Virer à gauche">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" /></svg>
-    <em>←</em>
+  <button class="zone zone-l" id="zone-l" type="button" aria-label="Virer à gauche">
+    <span class="chev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" /></svg></span>
+    <span class="tag">gauche</span>
   </button>
-  <button class="pad pad-jump" id="pad-jump" type="button" aria-label="Charger et sauter">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19 L12 5 M6 11 L12 5 L18 11" /></svg>
-    <em>espace</em>
+  <button class="zone zone-m" id="zone-m" type="button" aria-label="Charger et sauter">
+    <span class="chev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19 L12 5 M6 11 L12 5 L18 11" /></svg></span>
+    <span class="tag">sauter</span>
     <i class="gauge"><s id="charge-bar"></s></i>
   </button>
-  <button class="pad pad-r" id="pad-r" type="button" aria-label="Virer à droite">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" /></svg>
-    <em>→</em>
+  <button class="zone zone-r" id="zone-r" type="button" aria-label="Virer à droite">
+    <span class="chev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" /></svg></span>
+    <span class="tag">droite</span>
   </button>
 </div>
 
@@ -54,9 +54,9 @@
     <h1>Ski 3000</h1>
     <p class="tag">Descente infinie, 60 secondes</p>
     <ul class="rules">
-      <li><em>Glisse</em> le doigt pour virer</li>
+      <li><em>Gauche</em> ou <em>droite</em> : tiens pour virer</li>
+      <li><em>Milieu</em> : tiens pour charger, lâche pour sauter</li>
       <li><em>Virer freine</em> : tiens ta ligne</li>
-      <li><em>Les bosses</em> te décollent</li>
     </ul>
     <p class="cta" id="title-cta">Touche pour partir</p>
     <p class="meta">Piste <b id="title-seed">000000</b> · record <b id="title-best">0</b> m</p>
