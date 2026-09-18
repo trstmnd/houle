@@ -1,0 +1,138 @@
+/* Houle. Une palette, chaude, lue par render.js via getComputedStyle. Pas de mode sombre. */
+:root {
+  --sky-1: #FBE4BF;
+  --sky-2: #F4A868;
+  --far: #E9BE8F;
+  --mid: #CF8A55;
+  --ground: #8A4A22;
+  --ground-edge: #5E2E12;
+  --fg: #3F1E0E;
+  --ink: #2B1B12;
+  --paper: #FFF4E3;
+  --accent: #1FB7A6;
+  --accent-hi: #EFFFFB;
+  --danger: #E0453A;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+/* L'attribut hidden gagne sur tout display posé plus bas : sinon #hud{display:flex} affiche un HUD caché. */
+[hidden] { display: none !important; }
+
+/* Pièges mobiles : scroll, zoom, sélection, loupe iOS, flash bleu, pull-to-refresh. Tous ici. */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sky-2);
+  color: var(--ink);
+  font-family: var(--font);
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game {
+  display: block;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  touch-action: none;
+}
+
+/* HUD : moitié haute seulement, le pouce vit en bas. Jamais cliquable. */
+#hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: calc(env(safe-area-inset-left, 0px) + 18px);
+  right: calc(env(safe-area-inset-right, 0px) + 18px);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+  font-weight: 700;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 rgba(255, 244, 227, 0.6);
+}
+.hud-left { display: flex; align-items: baseline; gap: 10px; }
+.hud-center { font-size: 26px; }
+.hud-right { display: flex; align-items: baseline; gap: 6px; font-size: 18px; }
+.chain {
+  color: var(--accent);
+  font-size: 18px;
+  transform-origin: left center;
+}
+.chain.pulse { animation: pulse 0.25s ease-out; }
+@keyframes pulse { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+#timer.blink { animation: blink 0.5s steps(2) infinite; }
+@keyframes blink { to { opacity: 0.2; } }
+
+/* Écrans : posés sur le canvas, dans la moitié haute. Le titre laisse passer le doigt. */
+section {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18vh);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 24px);
+  padding-right: calc(env(safe-area-inset-right, 0px) + 24px);
+  text-align: center;
+  pointer-events: none;
+}
+#end { pointer-events: auto; }
+
+h1 {
+  margin: 0 0 18px;
+  font-size: clamp(56px, 16vw, 96px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.how {
+  margin: 0 0 22px;
+  font-size: clamp(17px, 4.6vw, 22px);
+  line-height: 1.45;
+  font-weight: 500;
+}
+.meta {
+  margin: 0 0 30px;
+  font-size: 15px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.cta {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe { 50% { opacity: 0.45; } }
+.label { margin: 0; font-size: 16px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.12em; }
+.big { margin: 4px 0 8px; font-size: clamp(64px, 20vw, 110px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+
+.actions { display: flex; flex-direction: column; gap: 12px; width: min(100%, 320px); }
+button {
+  appearance: none;
+  border: 0;
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-height: 56px;
+  font: 700 18px var(--font);
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 2px 0 rgba(43, 27, 18, 0.25);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:active { transform: translateY(2px); box-shadow: none; }
+#btn-share { background: var(--accent); color: var(--accent-hi); }
+.toast { margin: 14px 0 0; font-size: 15px; font-weight: 700; color: var(--accent); }
