@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#F4A868">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Descente de dunes, un doigt, 60 secondes.">
+<title>Houle</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-left">
+    <span id="score">0</span>
+    <span id="chain" class="chain" hidden>×1</span>
+  </div>
+  <div class="hud-center"><span id="timer">60</span></div>
+  <div class="hud-right">
+    <span id="wind-arrow">→</span><span id="wind-value">0</span>
+  </div>
+</div>
+
+<section id="title">
+  <h1>Houle</h1>
+  <p class="how">Maintiens dans les creux.<br>Lâche avant la crête.<br>Traverse les anneaux.</p>
+  <p class="meta">Piste <span id="title-seed">000000</span> · record <span id="title-best">0</span></p>
+  <p class="cta" id="title-cta">Touche pour partir</p>
+</section>
+
+<section id="end" hidden>
+  <p class="label">Score</p>
+  <p class="big" id="end-score">0</p>
+  <p class="meta">Record sur cette piste <span id="end-best">0</span> · piste <span id="end-seed">000000</span></p>
+  <div class="actions">
+    <button id="btn-replay" type="button">Rejouer cette piste</button>
+    <button id="btn-new" type="button">Nouvelle piste</button>
+    <button id="btn-share" type="button">Partager le défi</button>
+  </div>
+  <p class="toast" id="toast" hidden>Lien copié</p>
+</section>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>

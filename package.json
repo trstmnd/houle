@@ -1,0 +1,10 @@
+{
+  "name": "houle",
+  "private": true,
+  "type": "module",
+  "description": "Descente de dunes, un doigt, 60 secondes. Zéro dépendance, zéro build.",
+  "scripts": {
+    "check": "sh check.sh",
+    "serve": "python3 -m http.server 8000 --directory game"
+  }
+}
