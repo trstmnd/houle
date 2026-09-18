@@ -16,7 +16,7 @@ const PEAK_HI = 0xFFC9A6, PEAK_LO = 0x6E4E86   // chaîne lointaine : alpenglow 
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, armL, armR, skiL, skiR, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+let skier, skierBody, armL, armR, skiL, skiR, drift, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
 let streaks
 let pylons, cables, chairs
 let liftRow = NaN
@@ -33,6 +33,9 @@ const tmpObj = new THREE.Object3D()   // réutilisé pour poser les fanions, rie
 
 const NX = TUNING.GRID_NX, NZ = TUNING.GRID_NZ, CELL = TUNING.CELL
 const W = NX + 1                      // sommets par rangée
+const DRIFT_N = 200       // poudreuse qui rampe sur la piste
+const DRIFT_LIFE = 2.6    // s
+const DRIFT_R = 70        // m, rayon d'apparition autour du skieur
 const STREAK_N = 70       // traînées de vitesse, en segments
 const STREAK_V = 26       // m/s à partir desquels elles apparaissent
 const SPRAY_N = 260       // pool de flocons, jamais réalloué
@@ -47,6 +50,10 @@ const sprayLife = new Float32Array(SPRAY_N)
 let sprayHead = 0
 const streakPos = new Float32Array(STREAK_N * 6)
 const streakLife = new Float32Array(STREAK_N)
+const driftPos = new Float32Array(DRIFT_N * 3)
+const driftVel = new Float32Array(DRIFT_N * 3)
+const driftLife = new Float32Array(DRIFT_N)
+let driftHead = 0
 const trackPos = new Float32Array(TRACK_N * 2 * 3)
 const trackCol = new Float32Array(TRACK_N * 2 * 3)
 let trackLastX = NaN, trackLastZ = 0
@@ -162,15 +169,32 @@ export function init(canvas) {
   track.frustumCulled = false
   scene.add(track)
 
+  // Un flocon rond, dessiné une fois dans un canvas hors écran. Sans lui, chaque particule est un
+  // carré plein, et la neige ressemble à des confettis.
+  const flocon = new THREE.CanvasTexture(faitFlocon())
+
   // Gerbe de neige : un pool de points, la seule chose qui dise que la neige est de la neige.
   const sg = new THREE.BufferGeometry()
   sg.setAttribute('position', new THREE.BufferAttribute(sprayPos, 3))
   sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   spray = new THREE.Points(sg, new THREE.PointsMaterial({
-    color: 0xFFFFFF, size: 0.17, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false,
+    color: 0xFFFFFF, size: 0.34, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false,
   }))
   spray.frustumCulled = false
   scene.add(spray)
+
+  // Poudreuse : de la neige qui rampe sur la pente même à l'arrêt. C'est ce qui empêche le sol
+  // d'avoir l'air d'une maquette figée.
+  const dg = new THREE.BufferGeometry()
+  dg.setAttribute('position', new THREE.BufferAttribute(driftPos, 3))
+  dg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
+  drift = new THREE.Points(dg, new THREE.PointsMaterial({
+    color: 0xEAF2FF, size: 0.3, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.42, depthWrite: false,
+  }))
+  drift.frustumCulled = false
+  scene.add(drift)
 
   // Traînées de vitesse : des segments qui filent le long du regard. C'est tout l'effet de vitesse
   // des jeux de glisse arcade, et ça ne coûte que 70 segments.
@@ -221,6 +245,21 @@ export function init(canvas) {
   postGeo.translate(0, 1.6, 0)
   ramps = new THREE.InstancedMesh(postGeo, new THREE.MeshLambertMaterial({ color: RAMP }), RAMP_N * RAMP_POSTS)
   scene.add(ramps)
+}
+
+// Un disque dégradé, du blanc plein au transparent. 12 lignes, aucun fichier.
+function faitFlocon() {
+  const c = document.createElement('canvas')
+  c.width = 64
+  c.height = 64
+  const g = c.getContext('2d')
+  const d = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  d.addColorStop(0, 'rgba(255,255,255,1)')
+  d.addColorStop(0.45, 'rgba(255,255,255,0.85)')
+  d.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = d
+  g.fillRect(0, 0, 64, 64)
+  return c
 }
 
 // Ciel : une sphère vue de l'intérieur, dégradée du zénith à l'horizon. Aucun asset, 12 lignes.
@@ -362,6 +401,7 @@ export function draw(state, dt) {
   }
 
   updateTrack(state)
+  updateDrift(state, dt)
   updateStreaks(state, dt)
   updateSpray(state, dt)
   sky.position.copy(camera.position)   // le ciel suit la caméra, sinon on en sort
@@ -660,6 +700,47 @@ function emit(x, y, z, vx, vy, vz) {
   sprayPos[i * 3] = x; sprayPos[i * 3 + 1] = y; sprayPos[i * 3 + 2] = z
   sprayVel[i * 3] = vx; sprayVel[i * 3 + 1] = vy; sprayVel[i * 3 + 2] = vz
   sprayLife[i] = SPRAY_LIFE
+}
+
+// La poudreuse est semée autour du skieur, file dans la pente et meurt. Elle est semée au sol une
+// fois pour toutes : la suivre mètre par mètre coûterait un appel au terrain par flocon et par frame.
+function updateDrift(state, dt) {
+  const ter = state.terrain
+  const cs = ter.centreSlope(state.z)
+  const ax = -cs / Math.hypot(1, cs), az = -1 / Math.hypot(1, cs)   // sens de la pente, le long de l'axe
+
+  // Une poignée de flocons renaît par frame, pas tout le pool d'un coup.
+  const naissances = Math.min(6, DRIFT_N)
+  for (let k = 0; k < naissances; k++) {
+    const i = driftHead
+    driftHead = (driftHead + 1) % DRIFT_N
+    if (driftLife[i] > 0) continue
+    const a = hash01(i * 2.7 + state.dist) * Math.PI * 2
+    const r = 14 + hash01(i * 5.1 + state.dist) * DRIFT_R
+    const x = state.x + Math.cos(a) * r
+    const z = state.z - 45 + Math.sin(a) * r   // semée devant : elle balaie vers le joueur
+    const j = i * 3
+    driftPos[j] = x
+    driftPos[j + 1] = ter.height(x, z) + 0.25 + hash01(i * 9.3 + state.dist) * 1.6
+    driftPos[j + 2] = z
+    const v = 5 + hash01(i * 3.3 + state.dist) * 9
+    const lat = (hash01(i * 7.7 + state.dist) - 0.5) * 3
+    driftVel[j] = ax * v + lat
+    driftVel[j + 1] = -TUNING.SLOPE * v * 0.7
+    driftVel[j + 2] = az * v
+    driftLife[i] = DRIFT_LIFE * (0.5 + hash01(i * 11.1 + state.dist) * 0.5)
+  }
+
+  for (let i = 0; i < DRIFT_N; i++) {
+    if (driftLife[i] <= 0) continue
+    driftLife[i] -= dt
+    const j = i * 3
+    if (driftLife[i] <= 0) { driftPos[j + 1] = -9999; continue }
+    driftPos[j] += driftVel[j] * dt
+    driftPos[j + 1] += driftVel[j + 1] * dt
+    driftPos[j + 2] += driftVel[j + 2] * dt
+  }
+  drift.geometry.attributes.position.needsUpdate = true
 }
 
 // Les traînées naissent devant le skieur, filent vers l'arrière et meurent. Elles ne servent que

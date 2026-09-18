@@ -23,7 +23,11 @@ function elem(id) {
     },
     get className() { return [...classes].join(' ') },
     addEventListener(type, fn) { listeners.set(id + ':' + type, fn) },
-    getContext: () => ({}),
+    // Un contexte 2D bouchonné : render.js y dessine son flocon au chargement.
+    getContext: () => ({
+      createRadialGradient: () => ({ addColorStop() {} }),
+      fillRect() {}, fillStyle: null,
+    }),
     getBoundingClientRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
     setPointerCapture() {},
   }

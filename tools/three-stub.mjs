@@ -98,6 +98,7 @@ export class CircleGeometry extends Geo {}
 export class IcosahedronGeometry extends Geo {}
 export class BufferAttribute extends Attr {}
 export class Color extends Col {}
+export class CanvasTexture { constructor(image) { this.image = image; this.needsUpdate = false } }
 export class Vector3 extends Vec3 {}
 export class Sphere { constructor(c, r) { this.center = c; this.radius = r } }
 export class Fog { constructor(c, n, f) { this.color = c; this.near = n; this.far = f } }
