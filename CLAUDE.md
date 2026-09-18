@@ -45,7 +45,7 @@ Français dans les commentaires, les commits et les messages. Identifiants en an
 
 Une ligne par session, tenue à jour par l'agent à chaque push. C'est ce que lit la session suivante.
 
-- Session 1 (samedi 19/09 matin) : à faire
+- Session 1 (samedi 19/09 matin) : bloc 1 fait (terrain.js : sample, crests, inflectionBefore). Blocs 2 à 4 à faire
 - Session 2 (samedi 19/09 après-midi) : à faire
 - Session 3 (dimanche 20/09 matin) : à faire
 - Session 4 (dimanche 20/09 après-midi) : à faire
