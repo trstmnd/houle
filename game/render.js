@@ -15,6 +15,11 @@ const RAMP = 0xF08A2B
 const PEAK_HI = 0xFFC9A6, PEAK_LO = 0x6E4E86   // chaîne lointaine : alpenglow en haut, violette en bas
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
+// Direction du soleil, une fois pour toutes : bas sur l'horizon, à gauche et devant. C'est le seul
+// angle qui donne des ombres portées visibles, un soleil dans le champ et du relief sur la neige.
+// De dos, les ombres se cachent derrière ce qui les projette et le terrain devient un aplat.
+const SUN_DIR = [-0.78, 0.33, -0.53]
+
 // Mensurations du skieur, en mètres. Cuisse et tibia sont égaux : la flexion du genou se résout
 // alors exactement, sans tâtonner, quelle que soit la hauteur de la hanche.
 const HIP_H = 0.82, THIGH = 0.44, SHIN = 0.44, UPPER = 0.34, FORE = 0.32
@@ -22,6 +27,7 @@ const HIP_H = 0.82, THIGH = 0.44, SHIN = 0.44, UPPER = 0.34, FORE = 0.32
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
 let skier, skierBody, hips, chest, armL, armR, foreL, foreR, thighL, thighR, shinL, shinR, bootL, bootR, skiL, skiR, drift, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
 let streaks
+let sun
 // Animation du skieur : ressort des jambes, mémoire du contact au sol. C'est de l'état de rendu,
 // jamais de l'état de jeu : rien de tout cela ne revient dans state.
 let flex = 0, flexV = 0, etaitAuSol = true, tumble = 0
@@ -81,6 +87,10 @@ export function init(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.15
+  // Ombre portée réelle, mais seulement celle du skieur : la carte suit le joueur et ne couvre
+  // que quelques mètres, donc elle est nette et la passe ne dessine qu'une quinzaine de boîtes.
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFShadowMap   // le filtre doux coûte plusieurs prises par pixel sur tout l'écran
 
   scene = new THREE.Scene()
   scene.background = new THREE.Color(SKY_LOW)
@@ -92,9 +102,18 @@ export function init(canvas) {
   camera = new THREE.PerspectiveCamera(TUNING.FOV_BASE, 1, 0.5, 900)
 
   scene.add(new THREE.HemisphereLight(0xCBD8FF, 0x4A3F7A, 0.9))
-  const sun = new THREE.DirectionalLight(SUN, 1.6)
-  sun.position.set(-0.85, 0.3, 0.42)
-  scene.add(sun)
+  sun = new THREE.DirectionalLight(SUN, 1.6)
+  sun.position.set(SUN_DIR[0] * 44, SUN_DIR[1] * 44, SUN_DIR[2] * 44)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(512, 512)
+  const f = 9                        // m de demi-côté : juste de quoi contenir le skieur et son ombre
+  sun.shadow.camera.left = -f; sun.shadow.camera.right = f
+  sun.shadow.camera.top = f; sun.shadow.camera.bottom = -f
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 120
+  sun.shadow.camera.updateProjectionMatrix()   // sans ça, three garde le cadre par défaut
+  sun.shadow.bias = -0.0012         // sans ce biais, la neige se raye elle-même
+  sun.shadow.normalBias = 0.04
+  scene.add(sun, sun.target)
 
   // Grille de terrain : PlaneGeometry posée à plat, hauteurs réécrites quand la grille change de case.
   geo = new THREE.PlaneGeometry(NX * CELL, NZ * CELL, NX, NZ)
@@ -106,7 +125,12 @@ export function init(canvas) {
   copyColor(SNOW, cSnow); copyColor(SNOW_SHADE, cShade); copyColor(ROCK, cRock)
   const span = Math.max(NX, NZ) * CELL
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), span)
-  terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }))
+  // Phong plutôt que Lambert : la neige renvoie un éclat rasant vers le soleil couchant. C'est
+  // ce reflet, et non la couleur, qui dit que c'est une surface et pas un aplat de papier.
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+    vertexColors: true, flatShading: true, shininess: 14, specular: 0x6B78A8,
+  }))
+  terrainMesh.receiveShadow = true
   scene.add(terrainMesh)
   window.__terrainMesh = terrainMesh   // poignée de debug : comparer la grille au terrain réel
 
@@ -181,6 +205,7 @@ export function init(canvas) {
   hips.add(chest)
   skierBody.add(skiL, skiR, hips)
   skier.add(skierBody)
+  skier.traverse((o) => { if (o.isMesh) o.castShadow = true })
   scene.add(skier)
 
   // Ombre de contact : trois lignes, et le skieur cesse de flotter au-dessus de la neige.
@@ -235,8 +260,8 @@ export function init(canvas) {
   sg.setAttribute('position', new THREE.BufferAttribute(sprayPos, 3))
   sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   spray = new THREE.Points(sg, new THREE.PointsMaterial({
-    color: 0xFFFFFF, size: 0.34, map: flocon, alphaTest: 0.04,
-    sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false,
+    color: 0xFFFFFF, size: 0.14, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.75, depthWrite: false,
   }))
   spray.frustumCulled = false
   scene.add(spray)
@@ -247,8 +272,8 @@ export function init(canvas) {
   dg.setAttribute('position', new THREE.BufferAttribute(driftPos, 3))
   dg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   drift = new THREE.Points(dg, new THREE.PointsMaterial({
-    color: 0xEAF2FF, size: 0.3, map: flocon, alphaTest: 0.04,
-    sizeAttenuation: true, transparent: true, opacity: 0.42, depthWrite: false,
+    color: 0xEAF2FF, size: 0.13, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.32, depthWrite: false,
   }))
   drift.frustumCulled = false
   scene.add(drift)
@@ -328,13 +353,21 @@ function makeSky() {
       top: { value: new THREE.Color(SKY_TOP) },
       mid: { value: new THREE.Color(SKY_MID) },
       low: { value: new THREE.Color(SKY_LOW) },
+      sunDir: { value: new THREE.Vector3(SUN_DIR[0], SUN_DIR[1], SUN_DIR[2]).normalize() },
+      sunCol: { value: new THREE.Color(SUN) },
     },
-    vertexShader: 'varying float vH; void main() { vH = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: [
-      'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying float vH;',
+      'uniform vec3 top; uniform vec3 mid; uniform vec3 low; uniform vec3 sunDir; uniform vec3 sunCol;',
+      'varying vec3 vD;',
       'void main() {',
-      '  float h = clamp(vH * 1.5 + 0.12, 0.0, 1.0);',
+      '  float h = clamp(vD.y * 1.5 + 0.12, 0.0, 1.0);',
       '  vec3 c = h < 0.35 ? mix(low, mid, h / 0.35) : mix(mid, top, (h - 0.35) / 0.65);',
+      // Le halo d'abord, le disque ensuite : c'est le halo qui fait le contre-jour, le disque
+      // seul ne serait qu'un point blanc collé sur un dégradé.
+      '  float d = max(dot(vD, sunDir), 0.0);',
+      '  c += low * pow(d, 6.0) * 0.45;',
+      '  c += sunCol * pow(d, 900.0) * 1.6;',
       '  gl_FragColor = vec4(c, 1.0);',
       '}',
     ].join('\n'),
@@ -417,13 +450,21 @@ export function draw(state, dt) {
   animeSkieur(state, dt)
 
   // L'ombre reste au sol et s'estompe avec la hauteur : c'est elle qui dit où on va retomber.
+  // Le soleil est directionnel, mais sa carte d'ombre, elle, est locale : on la déplace avec le
+  // skieur, sinon il sort du cadre au bout de dix mètres et l'ombre disparaît.
+  sun.position.set(state.x + SUN_DIR[0] * 44, state.y + SUN_DIR[1] * 44, state.z + SUN_DIR[2] * 44)
+  sun.target.position.set(state.x, state.y, state.z)
+  sun.target.updateMatrixWorld()
+
   const gy = state.terrain.height(state.x, state.z)
   const air = state.y - gy
   shadow.position.set(state.x, gy + 0.06, state.z)
   shadow.rotation.z = state.heading          // une ellipse à la taille des skis, tournée comme eux
   const k = 1 / (1 + air * 0.1)
   shadow.scale.set(0.42 + 0.2 * (1 - k), 1.05 + 0.5 * (1 - k), 1)
-  shadow.material.opacity = 0.32 * k
+  // Au sol, l'ombre portée suffit. En vol elle part de côté, donc la tache reprend son rôle :
+  // dire où on va retomber. Entre les deux, elle monte progressivement.
+  shadow.material.opacity = 0.3 * k * clamp01((air - 0.6) / 1.4)
 
   const cam = state.cam
   camera.position.set(cam.x, cam.y, cam.z)
@@ -859,6 +900,8 @@ function updateDrift(state, dt) {
     driftPos[j] += driftVel[j] * dt
     driftPos[j + 1] += driftVel[j + 1] * dt
     driftPos[j + 2] += driftVel[j + 2] * dt
+    // Passée le joueur, elle est dans l'oeil de la caméra et fait une grosse tache blanche.
+    if (driftPos[j + 2] > state.z + 3) { driftLife[i] = 0; driftPos[j + 1] = -9999 }
   }
   drift.geometry.attributes.position.needsUpdate = true
 }

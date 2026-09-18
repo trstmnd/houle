@@ -8,6 +8,9 @@ class Vec3 {
   set(x, y, z) { this.x = x; this.y = y; this.z = z; return this }
   copy(v) { return this.set(v.x, v.y, v.z) }
   setScalar(v) { return this.set(v, v, v) }
+  multiplyScalar(k) { return this.set(this.x * k, this.y * k, this.z * k) }
+  length() { return Math.hypot(this.x, this.y, this.z) }
+  normalize() { const l = this.length() || 1; return this.multiplyScalar(1 / l) }
 }
 
 class Col {
@@ -50,12 +53,15 @@ class Obj3D {
   }
   add(...o) { this.children.push(...o); return this }
   updateMatrix() { return this }
+  updateMatrixWorld() { return this }
   lookAt() { return this }
+  traverse(f) { f(this); for (const c of this.children) c.traverse(f) }
 }
 
 class MeshLike extends Obj3D {
   constructor(geometry, material) {
     super()
+    this.isMesh = true
     this.geometry = geometry || new Geo()
     this.material = material || {}
     this.frustumCulled = true
@@ -68,7 +74,12 @@ class MeshLike extends Obj3D {
 }
 
 export class WebGLRenderer {
-  constructor(o = {}) { this.domElement = o.canvas || {}; this.toneMapping = 0; this.toneMappingExposure = 1 }
+  constructor(o = {}) {
+    this.domElement = o.canvas || {}
+    this.toneMapping = 0
+    this.toneMappingExposure = 1
+    this.shadowMap = { enabled: false, type: 0 }
+  }
   setPixelRatio() {} ; setSize() {} ; render() {}
 }
 export class Scene extends Obj3D {}
@@ -77,7 +88,18 @@ export class PerspectiveCamera extends Obj3D {
   updateProjectionMatrix() {}
 }
 export class HemisphereLight extends Obj3D {}
-export class DirectionalLight extends Obj3D {}
+export class DirectionalLight extends Obj3D {
+  constructor() {
+    super()
+    this.castShadow = false
+    this.target = new Obj3D()
+    this.shadow = {
+      mapSize: { set() {} },
+      camera: { left: 0, right: 0, top: 0, bottom: 0, near: 0, far: 0, updateProjectionMatrix() {} },
+      bias: 0, normalBias: 0,
+    }
+  }
+}
 export class Group extends Obj3D {}
 export class Object3D extends Obj3D {}
 export class Mesh extends MeshLike {}
@@ -103,9 +125,12 @@ export class Vector3 extends Vec3 {}
 export class Sphere { constructor(c, r) { this.center = c; this.radius = r } }
 export class Fog { constructor(c, n, f) { this.color = c; this.near = n; this.far = f } }
 export class MeshLambertMaterial { constructor(o = {}) { Object.assign(this, o) } }
+export class MeshPhongMaterial { constructor(o = {}) { Object.assign(this, o) } }
 export class MeshBasicMaterial { constructor(o = {}) { Object.assign(this, o) } }
 export class PointsMaterial { constructor(o = {}) { Object.assign(this, o) } }
 export class ShaderMaterial { constructor(o = {}) { Object.assign(this, o) } }
 export const BackSide = 1
 export const DoubleSide = 2
 export const ACESFilmicToneMapping = 4
+export const PCFSoftShadowMap = 2
+export const PCFShadowMap = 1

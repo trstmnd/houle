@@ -6,7 +6,7 @@ import * as audio from './audio.js'
 
 // Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
 // c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
-const VERSION = '0.18.0'
+const VERSION = '0.19.0'
 
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 

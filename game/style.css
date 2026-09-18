@@ -45,11 +45,24 @@ html, body {
   touch-action: none;
 }
 
+/* Vignette : les bords de l'image s'assombrissent, comme un objectif. Trois lignes de CSS qui
+   donnent de la profondeur à une image sans post-traitement, et qui ne coûtent rien au GPU du
+   téléphone. Elle est sous le HUD et sous les zones, donc elle n'assombrit jamais le texte. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse 78% 62% at 50% 46%, rgba(0, 0, 0, 0) 55%, rgba(26, 12, 38, 0.38) 100%);
+}
+
 /* HUD : moitié haute seulement, le pouce vit en bas. Jamais cliquable. */
 #hud {
   position: fixed;
   inset: calc(var(--pad-top) + 12px) 16px auto 16px;
   pointer-events: none;
+  z-index: 3;
   font-variant-numeric: tabular-nums;
 }
 .hud-row { display: flex; justify-content: space-between; align-items: flex-start; }
