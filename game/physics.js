@@ -16,10 +16,12 @@ export const TUNING = {
   EDGE_DRAG: 0.45,      // /s à steer = 1 : virer coûte, c'est tout l'arbitrage du jeu
   FRICTION: 0.06,       // /s, neige damée
   AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
-  DEEP_DRAG: 1.2,       // /s hors piste
-  TRACK_HALF: 18,       // m, demi-largeur de piste : au-delà les fanions sortent du cadre en portrait
+  DEEP_DRAG: 0.4,       // /s hors piste : un coût, pas un mur
+  TRACK_HALF: 45,       // m, demi-largeur : plus étroit, un virage tenu sort de la piste en 5 s
 
   // Vol et réception
+  STICK: 3.2,           // combien de g les jambes encaissent avant que le sol lâche : sans ce terme,
+                        // la moindre bosse catapulte, un skieur absorbe et reste collé
   AIR_STEER: 0.6,       // le cap répond moins bien en l'air qu'au sol
   TAKEOFF_GRACE: 0.06,  // s sans test de contact après le décollage
   LAND_PERFECT: 0.22,   // rad
@@ -41,11 +43,11 @@ export const TUNING = {
   WAVE_Z: 46,           // m, rouleaux en travers : ce sont eux qui décollent
   WAVE_BIG_X: 190,
   WAVE_BIG_Z: 260,
-  MOG_X: 9,             // m, pas des bosses
-  MOG_Z: 11,
+  MOG_X: 13,             // m, pas des bosses
+  MOG_Z: 16,
   MOG_BAND: 220,        // m, alternance lisse / bosselé
   R1: 2.2,
-  R2: 1.6,
+  R2: 2.0,
   R3: 5.0,
   MOG_AMP: 0.85,
 
@@ -158,7 +160,7 @@ function stepGround(state, dt) {
   // Courbure du sol le long du cap : positive sur un dos de bosse.
   const hdd = ng.hxx * ndx * ndx + 2 * ng.hxz * ndx * ndz + ng.hzz * ndz * ndz
   const kappa = -hdd / Math.pow(1 + nhd * nhd, 1.5)
-  if (kappa > 0 && s * s * kappa > T.G * ninv) {
+  if (kappa > 0 && s * s * kappa > T.G * T.STICK * ninv) {
     state.grounded = false
     state.airTime = 0
     state.events.push('takeoff')
