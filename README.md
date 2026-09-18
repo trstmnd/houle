@@ -10,9 +10,9 @@ Zéro dépendance, zéro build, zéro image : Canvas 2D et JavaScript vanilla, 9
 
 1. App Claude, onglet Code, dépôt `trstmnd/houle`, modèle Opus 5.
 2. Tape `Session 1` (puis 2, 3, 4 : le plan est dans `SPEC.md` §11).
-3. Après chaque push, recharge https://trstmnd.github.io/houle/ et joue.
+3. Après chaque push, l'agent donne l'URL de preview de sa branche. Ouvre-la, joue.
 4. Réglage : dis la sensation (« ça décolle trop mou »), pas la solution.
-5. Si l'agent ouvre une PR au lieu de pousser sur `main` : un tap dans l'app GitHub.
+5. Fin de session : `merge`, puis un tap sur la PR dans l'app GitHub.
 
 ## En local sur le Mac
 
