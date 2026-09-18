@@ -335,6 +335,11 @@ export function draw(state, dt) {
   const cam = state.cam
   camera.position.set(cam.x, cam.y, cam.z)
   lookAt(state, look)
+  // Le vecteur haut tourne autour de l'axe de visée : c'est ça, pencher l'horizon, et pas
+  // simplement tourner autour de Z, faux dès que le cap n'est plus dans l'axe.
+  const cr = Math.cos(cam.roll), sr = Math.sin(cam.roll)
+  const hx = Math.cos(state.heading), hz = Math.sin(state.heading)
+  camera.up.set(hx * sr, cr, hz * sr)
   camera.lookAt(look.x, look.y, look.z)
   if (Math.abs(camera.fov - cam.fov) > 0.01) {
     camera.fov = cam.fov
@@ -439,7 +444,7 @@ function writeGrid() {
       const wx = originX + ix * CELL - NX * CELL * 0.5
       const wz = originZ + iz * CELL - NZ * CELL * 0.5
       const hors = Math.abs(wx) - TUNING.TRACK_HALF
-      const damee = hors < 0 ? 1 : (hors < 6 ? 1 - hors / 6 : 0)
+      const damee = hors < 0 ? 1 : (hors < 5 ? 1 - hors / 5 : 0)
       const steep = Math.sqrt(hx * hx + dz * dz)
       let rock = (steep - 0.7) / 0.45
       rock = rock < 0 ? 0 : (rock > 1 ? 1 : rock)
@@ -449,10 +454,10 @@ function writeGrid() {
       const grain = 1 + 0.035 * Math.sin(wx * 0.63 + 1.7) * Math.sin(wz * 0.71)
       const snow = 1 - rock - shade
       const c = i * 3
-      const lift = (1 + 0.07 * damee) * grain   // la neige damée renvoie un peu plus de lumière
+      const lift = (1 + 0.16 * damee) * grain   // la neige damée renvoie franchement plus de lumière
       col[c] = (cSnow.r * snow + cShade.r * shade + cRock.r * rock) * lift
       col[c + 1] = (cSnow.g * snow + cShade.g * shade + cRock.g * rock) * lift
-      col[c + 2] = (cSnow.b * snow + cShade.b * shade + cRock.b * rock) * (lift - 0.03 * damee)
+      col[c + 2] = (cSnow.b * snow + cShade.b * shade + cRock.b * rock) * (lift - 0.1 * damee)
     }
   }
   posAttr.needsUpdate = true
