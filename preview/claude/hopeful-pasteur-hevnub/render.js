@@ -15,9 +15,22 @@ const RAMP = 0xF08A2B
 const PEAK_HI = 0xFFC9A6, PEAK_LO = 0x6E4E86   // chaîne lointaine : alpenglow en haut, violette en bas
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
+// Direction du soleil, une fois pour toutes : bas sur l'horizon, à gauche et devant. C'est le seul
+// angle qui donne des ombres portées visibles, un soleil dans le champ et du relief sur la neige.
+// De dos, les ombres se cachent derrière ce qui les projette et le terrain devient un aplat.
+const SUN_DIR = [-0.78, 0.33, -0.53]
+
+// Mensurations du skieur, en mètres. Cuisse et tibia sont égaux : la flexion du genou se résout
+// alors exactement, sans tâtonner, quelle que soit la hauteur de la hanche.
+const HIP_H = 0.82, THIGH = 0.44, SHIN = 0.44, UPPER = 0.34, FORE = 0.32
+
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, armL, armR, skiL, skiR, drift, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+let skier, skierBody, hips, chest, armL, armR, foreL, foreR, thighL, thighR, shinL, shinR, bootL, bootR, skiL, skiR, drift, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
 let streaks
+let sun
+// Animation du skieur : ressort des jambes, mémoire du contact au sol. C'est de l'état de rendu,
+// jamais de l'état de jeu : rien de tout cela ne revient dans state.
+let flex = 0, flexV = 0, etaitAuSol = true, tumble = 0
 let pylons, cables, chairs
 let liftRow = NaN
 const gateCol = { vif: null, terne: null }
@@ -74,6 +87,10 @@ export function init(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.15
+  // Ombre portée réelle, mais seulement celle du skieur : la carte suit le joueur et ne couvre
+  // que quelques mètres, donc elle est nette et la passe ne dessine qu'une quinzaine de boîtes.
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFShadowMap   // le filtre doux coûte plusieurs prises par pixel sur tout l'écran
 
   scene = new THREE.Scene()
   scene.background = new THREE.Color(SKY_LOW)
@@ -85,9 +102,18 @@ export function init(canvas) {
   camera = new THREE.PerspectiveCamera(TUNING.FOV_BASE, 1, 0.5, 900)
 
   scene.add(new THREE.HemisphereLight(0xCBD8FF, 0x4A3F7A, 0.9))
-  const sun = new THREE.DirectionalLight(SUN, 1.6)
-  sun.position.set(-0.85, 0.3, 0.42)
-  scene.add(sun)
+  sun = new THREE.DirectionalLight(SUN, 1.6)
+  sun.position.set(SUN_DIR[0] * 44, SUN_DIR[1] * 44, SUN_DIR[2] * 44)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(512, 512)
+  const f = 9                        // m de demi-côté : juste de quoi contenir le skieur et son ombre
+  sun.shadow.camera.left = -f; sun.shadow.camera.right = f
+  sun.shadow.camera.top = f; sun.shadow.camera.bottom = -f
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 120
+  sun.shadow.camera.updateProjectionMatrix()   // sans ça, three garde le cadre par défaut
+  sun.shadow.bias = -0.0012         // sans ce biais, la neige se raye elle-même
+  sun.shadow.normalBias = 0.04
+  scene.add(sun, sun.target)
 
   // Grille de terrain : PlaneGeometry posée à plat, hauteurs réécrites quand la grille change de case.
   geo = new THREE.PlaneGeometry(NX * CELL, NZ * CELL, NX, NZ)
@@ -99,7 +125,12 @@ export function init(canvas) {
   copyColor(SNOW, cSnow); copyColor(SNOW_SHADE, cShade); copyColor(ROCK, cRock)
   const span = Math.max(NX, NZ) * CELL
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), span)
-  terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }))
+  // Phong plutôt que Lambert : la neige renvoie un éclat rasant vers le soleil couchant. C'est
+  // ce reflet, et non la couleur, qui dit que c'est une surface et pas un aplat de papier.
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+    vertexColors: true, flatShading: true, shininess: 14, specular: 0x6B78A8,
+  }))
+  terrainMesh.receiveShadow = true
   scene.add(terrainMesh)
   window.__terrainMesh = terrainMesh   // poignée de debug : comparer la grille au terrain réel
 
@@ -108,22 +139,73 @@ export function init(canvas) {
   const dark = new THREE.MeshLambertMaterial({ color: 0x2B3A44 })
   const suit = new THREE.MeshLambertMaterial({ color: 0xFF5A1F })
   const vif = new THREE.MeshLambertMaterial({ color: 0x21E0C8 })
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.75, 4, 8), suit)
-  torso.position.y = 1.15
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), vif)
-  head.position.y = 1.72
+  const metal = new THREE.MeshLambertMaterial({ color: 0xB8C4D6 })
+
   const skiGeo = new THREE.BoxGeometry(0.14, 0.06, 1.75)
   skiL = new THREE.Mesh(skiGeo, dark); skiL.position.set(-0.19, 0.06, 0)
   skiR = new THREE.Mesh(skiGeo, dark); skiR.position.set(0.19, 0.06, 0)
-  // Jambes et bras : sans eux, vu de dos, le skieur est une quille sur deux barres.
-  const legGeo = new THREE.BoxGeometry(0.17, 0.72, 0.19)
-  const legL = new THREE.Mesh(legGeo, dark); legL.position.set(-0.19, 0.42, 0)
-  const legR = new THREE.Mesh(legGeo, dark); legR.position.set(0.19, 0.42, 0)
-  const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.62)
-  armL = new THREE.Mesh(armGeo, vif); armL.position.set(-0.36, 1.2, -0.22)
-  armR = new THREE.Mesh(armGeo, vif); armR.position.set(0.36, 1.2, -0.22)
-  skierBody.add(torso, head, skiL, skiR, legL, legR, armL, armR)
+
+  // Squelette à articulations : le pied reste sur le ski, la hanche monte et descend, le genou
+  // se plie tout seul pour rattraper la différence. Sans ce pli, absorber une bosse ou se mettre
+  // en œuf ne se voit pas : le skieur s'enfonce dans la neige au lieu de se ramasser.
+  hips = new THREE.Group()
+  hips.position.y = HIP_H
+  chest = new THREE.Group()
+  chest.position.y = 0.06
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.5, 4, 8), suit)
+  torso.position.y = 0.33
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.185, 10, 8), vif)
+  head.position.y = 0.78
+  chest.add(torso, head)
+
+  // Les segments partent du haut et descendent : la rotation du groupe est donc bien celle
+  // de l'articulation, pas celle du milieu du membre.
+  const thighGeo = new THREE.BoxGeometry(0.19, THIGH, 0.21); thighGeo.translate(0, -THIGH / 2, 0)
+  const shinGeo = new THREE.BoxGeometry(0.16, SHIN, 0.18); shinGeo.translate(0, -SHIN / 2, 0)
+  const bootGeo = new THREE.BoxGeometry(0.2, 0.19, 0.36); bootGeo.translate(0, -0.08, -0.04)
+  const armGeo = new THREE.BoxGeometry(0.14, UPPER, 0.15); armGeo.translate(0, -UPPER / 2, 0)
+  const foreGeo = new THREE.BoxGeometry(0.12, FORE, 0.13); foreGeo.translate(0, -FORE / 2, 0)
+  const poleGeo = new THREE.BoxGeometry(0.028, 1.15, 0.028); poleGeo.translate(0, -0.5, 0)
+
+  function jambe(cote) {
+    const cuisse = new THREE.Group()
+    cuisse.position.set(cote * 0.19, 0, 0)
+    cuisse.add(new THREE.Mesh(thighGeo, dark))
+    const tibia = new THREE.Group()
+    tibia.position.y = -THIGH
+    tibia.add(new THREE.Mesh(shinGeo, dark))
+    const chaussure = new THREE.Group()
+    chaussure.position.y = -SHIN
+    chaussure.add(new THREE.Mesh(bootGeo, suit))
+    tibia.add(chaussure)
+    cuisse.add(tibia)
+    hips.add(cuisse)
+    return [cuisse, tibia, chaussure]
+  }
+  function bras(cote) {
+    const epaule = new THREE.Group()
+    epaule.position.set(cote * 0.26, 0.55, 0)
+    epaule.add(new THREE.Mesh(armGeo, vif))
+    const avant = new THREE.Group()
+    avant.position.y = -UPPER
+    avant.add(new THREE.Mesh(foreGeo, vif))
+    const baton = new THREE.Mesh(poleGeo, metal)
+    baton.position.y = -FORE
+    baton.rotation.x = -1.15          // le bâton traîne vers l'arrière, jamais planté dans la neige
+    avant.add(baton)
+    epaule.add(avant)
+    chest.add(epaule)
+    return [epaule, avant]
+  }
+  ;[thighL, shinL, bootL] = jambe(-1)
+  ;[thighR, shinR, bootR] = jambe(1)
+  ;[armL, foreL] = bras(-1)
+  ;[armR, foreR] = bras(1)
+
+  hips.add(chest)
+  skierBody.add(skiL, skiR, hips)
   skier.add(skierBody)
+  skier.traverse((o) => { if (o.isMesh) o.castShadow = true })
   scene.add(skier)
 
   // Ombre de contact : trois lignes, et le skieur cesse de flotter au-dessus de la neige.
@@ -178,8 +260,8 @@ export function init(canvas) {
   sg.setAttribute('position', new THREE.BufferAttribute(sprayPos, 3))
   sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   spray = new THREE.Points(sg, new THREE.PointsMaterial({
-    color: 0xFFFFFF, size: 0.34, map: flocon, alphaTest: 0.04,
-    sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false,
+    color: 0xFFFFFF, size: 0.14, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.75, depthWrite: false,
   }))
   spray.frustumCulled = false
   scene.add(spray)
@@ -190,8 +272,8 @@ export function init(canvas) {
   dg.setAttribute('position', new THREE.BufferAttribute(driftPos, 3))
   dg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1e6)
   drift = new THREE.Points(dg, new THREE.PointsMaterial({
-    color: 0xEAF2FF, size: 0.3, map: flocon, alphaTest: 0.04,
-    sizeAttenuation: true, transparent: true, opacity: 0.42, depthWrite: false,
+    color: 0xEAF2FF, size: 0.13, map: flocon, alphaTest: 0.04,
+    sizeAttenuation: true, transparent: true, opacity: 0.32, depthWrite: false,
   }))
   drift.frustumCulled = false
   scene.add(drift)
@@ -271,13 +353,21 @@ function makeSky() {
       top: { value: new THREE.Color(SKY_TOP) },
       mid: { value: new THREE.Color(SKY_MID) },
       low: { value: new THREE.Color(SKY_LOW) },
+      sunDir: { value: new THREE.Vector3(SUN_DIR[0], SUN_DIR[1], SUN_DIR[2]).normalize() },
+      sunCol: { value: new THREE.Color(SUN) },
     },
-    vertexShader: 'varying float vH; void main() { vH = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: [
-      'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying float vH;',
+      'uniform vec3 top; uniform vec3 mid; uniform vec3 low; uniform vec3 sunDir; uniform vec3 sunCol;',
+      'varying vec3 vD;',
       'void main() {',
-      '  float h = clamp(vH * 1.5 + 0.12, 0.0, 1.0);',
+      '  float h = clamp(vD.y * 1.5 + 0.12, 0.0, 1.0);',
       '  vec3 c = h < 0.35 ? mix(low, mid, h / 0.35) : mix(mid, top, (h - 0.35) / 0.65);',
+      // Le halo d'abord, le disque ensuite : c'est le halo qui fait le contre-jour, le disque
+      // seul ne serait qu'un point blanc collé sur un dégradé.
+      '  float d = max(dot(vD, sunDir), 0.0);',
+      '  c += low * pow(d, 6.0) * 0.45;',
+      '  c += sunCol * pow(d, 900.0) * 1.6;',
       '  gl_FragColor = vec4(c, 1.0);',
       '}',
     ].join('\n'),
@@ -357,34 +447,24 @@ export function draw(state, dt) {
   skier.position.set(state.x, state.y, state.z)
   // Les skis dérapent un peu au-delà du cap dans le virage : c'est ce décalage qui fait le carving.
   skier.rotation.y = -state.heading - state.lean * 0.2
-
-  // Le skieur se penche DANS le virage. Le signe était inversé : à gauche, il partait à droite.
-  const lean = state.lean
-  skierBody.rotation.z = -lean * 0.62
-  skierBody.rotation.y = lean * 0.26              // les épaules ouvrent vers l'intérieur
-  // On se ramasse en chargeant, et on se plie quand ça va vite.
-  skierBody.rotation.x = 0.12 + 0.25 * (state.s / TUNING.MAX_SPEED) + state.charge * 0.32 + (state.wipe > 0 ? 0.9 : 0)
-  skierBody.position.y = -0.2 * state.charge
-
-  // Les bras contrebalancent : le bras extérieur monte, l'intérieur descend vers la neige.
-  armL.rotation.x = -0.5 - lean * 0.9 - state.charge * 0.5
-  armR.rotation.x = -0.5 + lean * 0.9 - state.charge * 0.5
-  armL.rotation.z = -0.25 - lean * 0.5
-  armR.rotation.z = 0.25 - lean * 0.5
-  // Les skis prennent la carre, et se rapprochent quand on charge.
-  skiL.rotation.z = -lean * 0.42
-  skiR.rotation.z = -lean * 0.42
-  skiL.position.x = -0.19 + lean * 0.05
-  skiR.position.x = 0.19 + lean * 0.05
+  animeSkieur(state, dt)
 
   // L'ombre reste au sol et s'estompe avec la hauteur : c'est elle qui dit où on va retomber.
+  // Le soleil est directionnel, mais sa carte d'ombre, elle, est locale : on la déplace avec le
+  // skieur, sinon il sort du cadre au bout de dix mètres et l'ombre disparaît.
+  sun.position.set(state.x + SUN_DIR[0] * 44, state.y + SUN_DIR[1] * 44, state.z + SUN_DIR[2] * 44)
+  sun.target.position.set(state.x, state.y, state.z)
+  sun.target.updateMatrixWorld()
+
   const gy = state.terrain.height(state.x, state.z)
   const air = state.y - gy
   shadow.position.set(state.x, gy + 0.06, state.z)
   shadow.rotation.z = state.heading          // une ellipse à la taille des skis, tournée comme eux
   const k = 1 / (1 + air * 0.1)
   shadow.scale.set(0.42 + 0.2 * (1 - k), 1.05 + 0.5 * (1 - k), 1)
-  shadow.material.opacity = 0.32 * k
+  // Au sol, l'ombre portée suffit. En vol elle part de côté, donc la tache reprend son rôle :
+  // dire où on va retomber. Entre les deux, elle monte progressivement.
+  shadow.material.opacity = 0.3 * k * clamp01((air - 0.6) / 1.4)
 
   const cam = state.cam
   camera.position.set(cam.x, cam.y, cam.z)
@@ -407,6 +487,86 @@ export function draw(state, dt) {
   sky.position.copy(camera.position)   // le ciel suit la caméra, sinon on en sort
   peaks.position.set(camera.position.x, state.y - 34, camera.position.z)
   renderer.render(scene, camera)
+}
+
+// Le skieur, image par image. Tout vient de state : la carre, la charge, le vol, la chute, l'œuf.
+// Rien ne s'accumule ici sauf le ressort des jambes, qui a besoin d'une mémoire d'une frame.
+function animeSkieur(state, dt) {
+  const T = TUNING
+  const lean = state.lean
+  const vit = clamp01(state.s / T.MAX_SPEED)
+  const enAir = !state.grounded
+  const chute = state.wipe > 0
+  const oeuf = state.tuck && !enAir && !chute
+
+  // Ressort des jambes. La réception comprime d'un coup, d'autant plus qu'on tombe de haut et
+  // vite, puis les jambes repoussent. C'est ce rebond qui fait qu'une réception se voit.
+  if (state.grounded && !etaitAuSol) flexV -= Math.min(2.8, 0.6 + state.airTime * 2.2 + vit * 1.6)
+  etaitAuSol = state.grounded
+  flexV += (-flex * 75 - flexV * 12) * dt
+  flex = clamp(flex + flexV * dt, -0.36, 0.05)
+
+  // Les bosses ont un pas connu : les jambes battent à la même fréquence, proportionnellement
+  // à la vitesse. À l'arrêt, rien ne bouge.
+  const chatter = enAir || chute ? 0 : Math.sin(state.dist * (2 * Math.PI / T.MOG_Z)) * 0.035 * vit
+
+  let hanche = HIP_H + flex + chatter - 0.2 * state.charge
+  if (oeuf) hanche -= 0.24
+  if (enAir) hanche -= 0.16          // en vol on ramène les jambes sous soi
+  if (chute) hanche -= 0.3
+
+  // Genou : cuisse et tibia étant égaux, le triangle se résout d'un cosinus, sans itérer.
+  const d = clamp(hanche, 0.3, THIGH + SHIN - 0.02)
+  const alpha = Math.atan2(Math.sqrt(Math.max(0, THIGH * THIGH - d * d * 0.25)), d * 0.5)
+  hips.position.y = d
+  for (const [cuisse, tibia, chaussure] of [[thighL, shinL, bootL], [thighR, shinR, bootR]]) {
+    cuisse.rotation.x = alpha
+    tibia.rotation.x = -2 * alpha
+    chaussure.rotation.x = alpha     // le pied reste à plat sur le ski quoi que fasse le genou
+  }
+  // La jambe extérieure porte : elle se tend, l'intérieure se replie sous le corps.
+  thighL.rotation.z = lean * 0.14
+  thighR.rotation.z = lean * 0.14
+
+  // Le buste : penché en avant avec la vitesse, cassé en deux en œuf, redressé à l'arrêt.
+  let pitch = 0.1 + 0.2 * vit + 0.3 * state.charge
+  if (oeuf) pitch += 0.85
+  if (enAir) pitch += 0.12
+  chest.rotation.x = pitch
+  // Angulation : le corps bascule sur la carre, les épaules restent plus droites que les hanches.
+  skierBody.rotation.z = -lean * 0.58
+  chest.rotation.z = lean * 0.2
+  chest.rotation.y = lean * 0.3                   // les épaules ouvrent vers l'intérieur du virage
+
+  // Bras. L'angle se pense dans le monde, pas dans le buste : l'épaule est fille du buste, donc
+  // on lui retire son inclinaison. Sans ça, se casser en deux en œuf envoie les bras en l'air.
+  // Au repos ils accompagnent, en œuf ils partent devant, bâtons sous les aisselles, en vol ils
+  // s'écartent pour équilibrer, et dans le virage l'extérieur monte.
+  const epaule = (oeuf ? 1.45 : (enAir ? -0.3 : 0.28 + 0.3 * state.charge)) - pitch
+  const coude = oeuf ? 0.2 : (enAir ? 0.55 : 0.7)
+  const ecart = oeuf ? 0.06 : (enAir ? 0.5 : 0.18)
+  armL.rotation.x = epaule - lean * 0.45
+  armR.rotation.x = epaule + lean * 0.45
+  armL.rotation.z = -ecart - lean * 0.3
+  armR.rotation.z = ecart - lean * 0.3
+  foreL.rotation.x = coude
+  foreR.rotation.x = coude
+
+  // Les skis prennent la carre et se resserrent en œuf. Écartés, ils tiennent mieux : c'est
+  // pour ça qu'on les serre quand on cherche la vitesse et qu'on les ouvre à la réception.
+  const serre = oeuf ? 0.13 : 0.19
+  skiL.rotation.z = -lean * 0.42
+  skiR.rotation.z = -lean * 0.42
+  skiL.position.x = -serre + lean * 0.05
+  skiR.position.x = serre + lean * 0.05
+  // En vol, les spatules pointent vers le haut : on ramène les pieds devant soi.
+  skiL.rotation.x = skiR.rotation.x = enAir ? -0.18 : 0
+
+  // La chute : le corps part en avant et roule, puis se remet d'aplomb pendant que le temps de
+  // chute s'écoule. Sans cette culbute, une chute ne se distingue pas d'un freinage.
+  const k = chute ? clamp01((T.WIPE_TIME - state.wipe) / T.WIPE_TIME) : 0
+  tumble += (k > 0 ? Math.sin(k * Math.PI) * 1.2 - tumble : -tumble) * (1 - Math.exp(-9 * dt))
+  skierBody.rotation.x = tumble
 }
 
 // La grille est calée sur un réseau fixe. Quand elle change de case, on ne la recalcule pas :
@@ -520,6 +680,7 @@ function writeGrid(ter) {
 }
 
 function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v) }
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
 
 // Les sapins ne bougent qu'au changement de rangée : 350 matrices, quelques fois par seconde.
 function updateTrees(state) {
@@ -739,6 +900,8 @@ function updateDrift(state, dt) {
     driftPos[j] += driftVel[j] * dt
     driftPos[j + 1] += driftVel[j + 1] * dt
     driftPos[j + 2] += driftVel[j + 2] * dt
+    // Passée le joueur, elle est dans l'oeil de la caméra et fait une grosse tache blanche.
+    if (driftPos[j + 2] > state.z + 3) { driftLife[i] = 0; driftPos[j + 1] = -9999 }
   }
   drift.geometry.attributes.position.needsUpdate = true
 }

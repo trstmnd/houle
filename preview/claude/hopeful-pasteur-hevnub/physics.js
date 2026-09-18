@@ -20,6 +20,9 @@ export const TUNING = {
   FRICTION: 0.06,       // /s, neige damée
   AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
   DEEP_DRAG: 0.4,       // /s hors piste : un coût, pas un mur
+  TUCK_DRAG: 0.55,      // en œuf, la traînée tombe à cette fraction : c'est tout le gain de vitesse.
+                        // Les deux côtés tenus à la fois, donc plus de carre et plus de saut : le
+                        // prix de l'œuf, c'est de ne plus pouvoir viser pendant qu'on accélère
   // La piste serpente et se creuse en cuvette : ce sont ses bords qui te ramènent dedans.
   TRACK_BEND1: 46,      // m, amplitude du grand lacet
   TRACK_LEN1: 700,      // m, sa longueur d'onde
@@ -129,6 +132,7 @@ export function createState(seed) {
     grounded: true,
     airTime: 0,
     press: false, wasPress: false, charge: 0,
+    tuck: false,                   // œuf : les deux côtés tenus en même temps
     jumpX: 0, jumpZ: 0, lastJump: 0, bestJump: 0,
     wipe: 0,                       // temps de chute restant
     dist: 0,                       // mètres descendus
@@ -156,6 +160,7 @@ export function step(state, dt) {
     state.wipe -= dt
     state.steer = 0                // pendant la chute, le doigt ne sert à rien
     state.press = false
+    state.tuck = false
   }
 
   // La détente part au relâcher, pas à l'appui : c'est le timing qui fait le saut.
@@ -191,7 +196,8 @@ function stepGround(state, dt) {
   s += -gEff * hd * inv * dt                // la gravité pousse dans la pente, doublée si on plaque
   const deep = Math.abs(state.x - state.terrain.centre(state.z)) > T.TRACK_HALF ? T.DEEP_DRAG : 0
   s -= (T.FRICTION + T.EDGE_DRAG * Math.abs(state.steer) + deep) * s * dt
-  s -= T.AIR_DRAG * s * s * dt
+  const oeuf = state.tuck && state.wipe <= 0
+  s -= T.AIR_DRAG * (oeuf ? T.TUCK_DRAG : 1) * s * s * dt
   s = clamp(s, T.MIN_SPEED, T.MAX_SPEED)
 
   state.heading += state.steer * T.TURN_RATE * dt
