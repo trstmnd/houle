@@ -63,6 +63,7 @@ class MeshLike extends Obj3D {
     this.instanceMatrix = { needsUpdate: false }
   }
   setMatrixAt() { return this }
+  setColorAt() { this.instanceColor = { needsUpdate: false }; return this }
   computeBoundingSphere() { return this }
 }
 

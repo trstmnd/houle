@@ -50,5 +50,7 @@ Le jeu a pivoté le 18/09 : la descente 2D de dunes (spec v2) est abandonnée, o
 - Bloc 1, glisser : fait, et réglé. STICK colle le skieur au sol, la piste fait 45 m de demi-largeur, les bosses sont écartées à 13 m. Tout droit 1243 m à 75 km/h, en virages tenus 802 m à 48 km/h
 - Bloc 2, chuter et compter : fait. Chrono 60 s avec la règle du dernier saut, écrans title et fin, records en localStorage, HUD vitesse et distance, grosses touches à l'écran, didacticiel en 4 étapes
 - Bloc 2 bis, tremplins : fait. Bosse gaussienne dans le terrain, balisée par deux piquets orange, longueur du saut mesurée et annoncée, trois sons selon la longueur, souffle du vent
-- Bloc 3, les portes : à faire. `gates.js` n'existe pas encore
-- Bloc 4, l'habillage : partiellement fait (sapins, ciel, sons). Restent les gerbes de neige, le partage testé sur téléphone, la mise en ligne sur `main`
+- Bloc 3, les portes : fait. `gates.js` pur, placement seedé écarté des tremplins, passage testé sur le segment du pas et borné en hauteur, chaîne, multiplicateur, score au HUD et à l'écran de fin. Mesuré : 2 portes sur 6 tout droit, 5 sur 5 en visant
+- Bloc 4, l'habillage : fait pour l'essentiel. Sapins, rochers, chaîne de sommets, gerbes de neige, trace des skis, sons. Restent le partage testé sur un vrai téléphone et le télésiège
+- `check.sh` fait trois passes depuis la v0.10.0, dont `domcheck.mjs` qui charge vraiment `render.js` et `main.js`. Le jeu est en ligne sur `main`
+- À régler au pouce de Tristan, jamais seul : `GATE_GAP` (140 m donne 5 à 6 portes par run, donc une chaîne qui plafonne à 4 et un ×8 inatteignable)

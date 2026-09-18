@@ -20,6 +20,7 @@
 <div id="hud" hidden>
   <div class="hud-row">
     <div class="stat stat-time"><b id="timer">60</b><span>s</span></div>
+    <div class="stat stat-score"><b id="score">0</b><span id="chain" class="chain" hidden>×1</span></div>
     <div class="stat stat-dist"><b id="dist">0</b><span>m</span></div>
   </div>
   <div class="speedo">
@@ -65,8 +66,9 @@
 
 <section id="end" hidden>
   <div class="panel">
-    <p class="label">Descente</p>
-    <p class="big"><b id="end-dist">0</b><span>m</span></p>
+    <p class="label">Score</p>
+    <p class="big"><b id="end-dist">0</b></p>
+    <p class="sub" id="end-sub">0 m parcourus</p>
     <p class="meta">Record sur cette piste <b id="end-best">0</b> m · piste <b id="end-seed">000000</b></p>
     <div class="actions">
       <button id="btn-replay" type="button">Rejouer cette piste</button>

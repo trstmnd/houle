@@ -6,7 +6,7 @@ import * as audio from './audio.js'
 
 // Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
 // c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
-const VERSION = '0.10.0'
+const VERSION = '0.11.0'
 
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
@@ -18,6 +18,8 @@ const elSpeed = document.getElementById('speed')
 const elSpeedBar = document.getElementById('speed-bar')
 const elDist = document.getElementById('dist')
 const elTimer = document.getElementById('timer')
+const elScore = document.getElementById('score')
+const elChain = document.getElementById('chain')
 const elFlash = document.getElementById('flash')
 const elJump = document.getElementById('jump')
 const elJumpLen = document.getElementById('jump-len')
@@ -127,8 +129,9 @@ function startRun() {
 
 function endRun() {
   const d = Math.round(state.dist)
-  if (d > best) { best = d; writeBest(seedKey, best) }
-  setText('end-dist', d)
+  if (state.score > best) { best = state.score; writeBest(seedKey, best) }
+  setText('end-dist', state.score)
+  setText('end-sub', d + ' m parcourus')
   setText('end-best', best)
   setText('end-seed', String(seed).padStart(6, '0'))
   endScreen.hidden = false
@@ -249,6 +252,7 @@ const TUTO = [
   { texte: 'Virer freine. Tout droit, ça va vite', fait: (s) => s.s > 22 },
   { texte: 'Vise les piquets orange : ce sont les tremplins', fait: (s) => !s.grounded },
   { texte: 'Tiens espace dans la courbe, lâche sur la bosse', fait: (s) => s.charge > 0.5 },
+  { texte: 'Passe entre les fanions : la chaîne multiplie', fait: (s) => s.chain > 0 },
 ]
 let tutoStep = 0
 let tutoDone = readBest('ski3000:tuto') === 1
@@ -283,6 +287,7 @@ function drain() {
     else if (e === 'land_flat') flash(false)
     else if (e === 'end') endRun()
     else if (e === 'jump_short' || e === 'jump_mid' || e === 'jump_long') showJump(e)
+    else if (e === 'gate') pulseChain()
   }
   events.length = 0
 }
@@ -297,13 +302,20 @@ function showJump(kind) {
   jumpTimer = 0.9
 }
 
+// Le multiplicateur pulse au passage : l'animation ne repart que si la classe est retirée.
+function pulseChain() {
+  elChain.classList.remove('pulse')
+  void elChain.offsetWidth
+  elChain.classList.add('pulse')
+}
+
 function flash(bad) {
   elFlash.classList.toggle('bad', bad)
   elFlash.classList.add('on')
   flashTimer = 0.06
 }
 
-let lastSpeed = -1, lastDist = -1, lastTimer = -1, lastCharge = -1
+let lastSpeed = -1, lastDist = -1, lastTimer = -1, lastCharge = -1, lastScore = -1, lastChain = -1
 
 // On ne touche le DOM que quand une valeur change : jamais à chaque frame pour rien.
 function updateHud() {
@@ -315,6 +327,12 @@ function updateHud() {
   }
   const d = Math.round(state.dist)
   if (d !== lastDist) { elDist.textContent = d; lastDist = d }
+  if (state.score !== lastScore) { elScore.textContent = state.score; lastScore = state.score }
+  if (state.chain !== lastChain) {
+    elChain.textContent = '×' + state.mult
+    elChain.hidden = state.chain < 1
+    lastChain = state.chain
+  }
   const ch = Math.round(state.charge * 20)
   if (ch !== lastCharge) { elChargeBar.style.width = ch * 5 + '%'; lastCharge = ch }
   const left = Math.max(0, Math.ceil(TUNING.RUN_TIME - state.t))

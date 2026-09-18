@@ -6,13 +6,15 @@ import { TUNING, lookAt } from './physics.js'
 const SKY_TOP = 0x2F7BC4, SKY_LOW = 0xCFE8F7, FOG = 0xCFE8F7
 const SNOW = 0xFFFFFF, SNOW_SHADE = 0x6E97C6, ROCK = 0x6E6357
 const STONE = 0x6A6E74, TRACK_COL = 0xB9CFE4
+const GATE_L = 0xE0453A, GATE_R = 0x1F7BB7   // rouge à gauche, bleu à droite, comme un slalom
 const PINE = 0x27443A, TRUNK = 0x4A3524, SUN = 0xFFF6E2
 const RAMP = 0xF08A2B
 const PEAK_HI = 0xE8F2FA, PEAK_LO = 0xA9C9E2   // chaîne lointaine : blanche en haut, noyée de brume en bas
 const FLAG_L = 0xE0453A, FLAG_R = 0x1F7BB7
 
 let renderer, scene, camera, terrainMesh, geo, posAttr, colAttr
-let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track
+let skier, skierBody, flagsL, flagsR, pines, trunks, sky, ramps, shadow, peaks, spray, rocks, track, gateL, gateR
+const gateCol = { vif: null, terne: null }
 const ramp = { x: 0, y: 0, z: 0 }
 const HIDE = -9999                    // hauteur où l'on range une instance inutilisée
 let rampFirst = NaN
@@ -167,6 +169,16 @@ export function init(canvas) {
     }
   }
 
+  // Portes de slalom : deux mâts et une banderole, assez hauts pour se voir de loin.
+  const mat = new THREE.BoxGeometry(0.28, TUNING.GATE_H, 0.28)
+  mat.translate(0, TUNING.GATE_H / 2, 0)
+  gateL = new THREE.InstancedMesh(mat, new THREE.MeshLambertMaterial({ color: 0xFFFFFF }), TUNING.GATE_POOL)
+  gateR = new THREE.InstancedMesh(mat, new THREE.MeshLambertMaterial({ color: 0xFFFFFF }), TUNING.GATE_POOL)
+  scene.add(gateL, gateR)
+  gateCol.vifL = new THREE.Color(GATE_L)
+  gateCol.vifR = new THREE.Color(GATE_R)
+  gateCol.terne = new THREE.Color(0xB6BEC6)
+
   // Balises de tremplin : on doit le voir venir pour viser, sinon le saut est subi.
   const postGeo = new THREE.BoxGeometry(0.5, 3.2, 0.5)
   postGeo.translate(0, 1.6, 0)
@@ -250,6 +262,7 @@ export function resize(w, h, dpr) {
 export function draw(state, dt) {
   updateTerrain(state)
   updateTrees(state)
+  updateGates(state)
   updateRamps(state)
   updateFlags(state)
 
@@ -447,6 +460,31 @@ function updateFlags(state) {
   }
   flagsL.instanceMatrix.needsUpdate = true
   flagsR.instanceMatrix.needsUpdate = true
+}
+
+// Les portes bougent peu, mais leur couleur change au passage : elles se ternissent une fois
+// jouées, pour que la prochaine se distingue d'un coup d'oeil.
+function updateGates(state) {
+  const T = TUNING
+  const gates = state.gates
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i]
+    const joue = g.passed || g.missed
+    for (let s = 0; s < 2; s++) {
+      const cible = s === 0 ? gateL : gateR
+      const dx = s === 0 ? -T.GATE_W / 2 : T.GATE_W / 2
+      tmpObj.position.set(g.x + dx, state.terrain.height(g.x + dx, g.z), g.z)
+      tmpObj.updateMatrix()
+      cible.setMatrixAt(i, tmpObj.matrix)
+      cible.setColorAt(i, joue ? gateCol.terne : (s === 0 ? gateCol.vifL : gateCol.vifR))
+    }
+  }
+  gateL.instanceMatrix.needsUpdate = true
+  gateR.instanceMatrix.needsUpdate = true
+  if (gateL.instanceColor) gateL.instanceColor.needsUpdate = true
+  if (gateR.instanceColor) gateR.instanceColor.needsUpdate = true
+  gateL.computeBoundingSphere()
+  gateR.computeBoundingSphere()
 }
 
 // Les piquets ne bougent qu'au passage d'un tremplin, pas à chaque frame.

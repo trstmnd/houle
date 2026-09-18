@@ -1,6 +1,7 @@
 // Physique du ski. PUR : aucun three, document, window, performance, Date, Math.random.
 // Mètres et secondes. Tout le feel vit dans TUNING. Voir SPEC.md §5, §9.
 import * as terrain from './terrain.js'
+import * as gates from './gates.js'
 
 export const STEP = 1 / 120
 
@@ -65,9 +66,12 @@ export const TUNING = {
   JUMP_SHORT: 18,       // m : en dessous, saut court
   JUMP_MID: 45,         // m : en dessous, saut moyen, au-dessus saut long
 
-  // Portes (bloc 3)
-  GATE_GAP: 140,
-  GATE_W: 9,
+  // Portes
+  GATE_GAP: 140,        // m entre deux portes
+  GATE_W: 9,            // m entre les deux fanions
+  GATE_H: 4,            // m de haut : au-dessus, on est passé par-dessus, ça ne compte pas
+  GATE_VALUE: 10,       // points, avant multiplicateur
+  GATE_POOL: 12,        // portes vivantes à la fois
   MULT_TABLE: [1, 2, 3, 5, 8],
 
   // Caméra et rendu, lus par render.js
@@ -101,7 +105,7 @@ export function wrapAngle(a) {
 export function createState(seed) {
   const ter = terrain.create(seed)
   const g = ter.sample(0, 0)
-  return {
+  const state = {
     phase: 'title',
     seed, terrain: ter,
     t: 0, ending: false,
@@ -118,10 +122,12 @@ export function createState(seed) {
     wipe: 0,                       // temps de chute restant
     dist: 0,                       // mètres descendus
     score: 0, chain: 0, mult: 1,
-    gates: [], gatesUpto: 0,
+    gates: [], gatesUpto: 0, lastGate: null,
     events: [],
     cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE },
   }
+  gates.create(state)
+  return state
 }
 
 /** Un pas fixe. Remplit state.events ('takeoff', 'land_flat', 'land_hard', 'wipe', 'gate', 'end'). */
@@ -150,8 +156,11 @@ export function step(state, dt) {
     state.charge -= state.charge * (1 - Math.exp(-6 * dt))
   }
 
+  const px = state.x, pz = state.z
   if (state.grounded) stepGround(state, dt)
   else stepAir(state, dt)
+  gates.check(state, px, pz)
+  gates.ensure(state)
 
   const target = state.wipe > 0 ? 0 : state.steer
   state.lean += (target - state.lean) * (1 - Math.exp(-8 * dt))
@@ -262,8 +271,7 @@ function land(state, g) {
   } else {
     state.s = T.WIPE_SPEED
     state.wipe = T.WIPE_TIME
-    state.chain = 0
-    state.mult = T.MULT_TABLE[0]
+    gates.breakChain(state)
     state.events.push('wipe')
   }
 
