@@ -31,7 +31,7 @@ Après chaque push, ta réponse tient en 5 lignes : ce qui a changé, l'URL, ce 
 ## Pipeline
 
 - **Chaque push déploie ta branche** : Actions lance `check.sh` puis publie `game/` sur `gh-pages`. Ta branche `claude/<slug>` est jouable sur `https://trstmnd.github.io/houle/preview/claude/<slug>/` environ 60 s après le push. Rien à fusionner pour tester.
-- `main` est publié à la racine : https://trstmnd.github.io/houle/ (la racine redirige vers `game/` en gardant `?seed=`).
+- `main` est publié à la racine : https://trstmnd.github.io/houle/ (le contenu de `game/` directement, `?seed=` fonctionne dessus).
 - Après chaque push, donne l'URL de preview complète de ta branche, telle quelle. Si le run Actions est rouge, rien n'est déployé : lis le log, corrige, repousse.
 - Fin de session : « merge » → tu ouvres la PR, Tristan la fusionne en un tap dans l'app GitHub, `main` se redéploie.
 - Session sur le Mac (tu as un navigateur) : `.claude/launch.json` lance `python3 -m http.server 8000 --directory game`. Teste toi-même avant de pousser. `file://` ne charge pas les modules ES.

@@ -617,7 +617,7 @@ Le code fait foi sur GitHub : `trstmnd/houle`, public. Le Drive n'est qu'un clon
 | Événement | Ce qui se passe | URL |
 |---|---|---|
 | Push sur n'importe quelle branche | Actions : `check.sh`, puis `game/` publié sur `gh-pages` dans `preview/<branche>/`. Rouge = rien ne part | `https://trstmnd.github.io/houle/preview/<branche>/` |
-| Push sur `main` | Idem, à la racine. La racine redirige vers `game/` en gardant `?seed=` | `https://trstmnd.github.io/houle/` |
+| Push sur `main` | Idem, à la racine du site (le contenu de `game/` directement) | `https://trstmnd.github.io/houle/` |
 
 Délai : environ 60 s après le push. L'URL de preview d'une branche ne change pas pendant toute la session : Tristan la garde ouverte et recharge.
 
