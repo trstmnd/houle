@@ -47,7 +47,8 @@ Une ligne par session, tenue à jour par l'agent à chaque push. C'est ce que li
 
 Le jeu a pivoté le 18/09 : la descente 2D de dunes (spec v2) est abandonnée, on code un ski 3D (`SPEC.md` v3). L'ancienne version vit dans `attic/SPEC-2d.md` et dans la PR 1.
 
-- Bloc 1, glisser : fait. Terrain 3D seedé, rendu Three, caméra qui s'ouvre avec la vitesse, direction au doigt, freinage au virage, décollage sur les bosses, réception. Reste le réglage (`SPEC.md` §9)
-- Bloc 2, chuter et compter : à faire (chute, chrono 60 s, écrans, HUD)
-- Bloc 3, les portes : à faire
-- Bloc 4, l'habillage : à faire
+- Bloc 1, glisser : fait, et réglé. STICK colle le skieur au sol, la piste fait 45 m de demi-largeur, les bosses sont écartées à 13 m. Tout droit 1243 m à 75 km/h, en virages tenus 802 m à 48 km/h
+- Bloc 2, chuter et compter : fait. Chrono 60 s avec la règle du dernier saut, écrans title et fin, records en localStorage, HUD vitesse et distance, grosses touches à l'écran, didacticiel en 4 étapes
+- Bloc 2 bis, tremplins : fait. Bosse gaussienne dans le terrain, balisée par deux piquets orange, longueur du saut mesurée et annoncée, trois sons selon la longueur, souffle du vent
+- Bloc 3, les portes : à faire. `gates.js` n'existe pas encore
+- Bloc 4, l'habillage : partiellement fait (sapins, ciel, sons). Restent les gerbes de neige, le partage testé sur téléphone, la mise en ligne sur `main`

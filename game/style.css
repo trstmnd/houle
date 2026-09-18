@@ -119,6 +119,64 @@ html, body {
 .flash.on { opacity: 0.5; transition: none; }
 .flash.bad { background: var(--danger); }
 
+/* Grosses touches : au pouce sur téléphone, à la souris sur ordinateur. Dans les coins bas,
+   là où le pouce vit, et assez larges pour être touchées sans viser. */
+#pads {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--pad-bottom) + 16px);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.pad {
+  pointer-events: auto;
+  width: 104px;
+  height: 104px;
+  padding: 0;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(22, 36, 46, 0.16);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.pad svg { width: 42px; height: 42px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+.pad em { font-style: normal; font-size: 12px; font-weight: 800; opacity: 0.55; }
+.pad.on { background: var(--accent); color: var(--paper); transform: scale(0.96); }
+
+/* Didacticiel : une phrase à la fois, sous le compteur, qui s'efface dès que le geste est fait. */
+#tuto {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: calc(var(--pad-top) + 40vh);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+#tuto b {
+  max-width: 320px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: rgba(22, 36, 46, 0.86);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(22, 36, 46, 0.2);
+  animation: tutoIn 0.3s ease-out;
+}
+@keyframes tutoIn { from { transform: translateY(10px); opacity: 0; } }
+
 /* Écrans : une carte posée sur la montagne, dans la moitié haute. */
 section {
   position: fixed;
