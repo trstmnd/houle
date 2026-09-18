@@ -15,6 +15,9 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 
+/* L'attribut hidden gagne sur tout display posé plus bas : sinon #hud{display:flex} affiche un HUD caché. */
+[hidden] { display: none !important; }
+
 /* Pièges mobiles : scroll, zoom, sélection, loupe iOS, flash bleu, pull-to-refresh. Tous ici. */
 html, body {
   margin: 0;
@@ -86,7 +89,6 @@ section {
   pointer-events: none;
 }
 #end { pointer-events: auto; }
-section[hidden] { display: none; }
 
 h1 {
   margin: 0 0 18px;
