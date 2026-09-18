@@ -57,13 +57,14 @@ export const TUNING = {
   MULT_TABLE: [1, 2, 3, 5, 8],
 
   // Caméra et rendu, lus par render.js
-  CAM_BACK: 11,
-  CAM_UP: 6,
+  CAM_BACK: 8.5,
+  CAM_UP: 3.6,
   CAM_RATE: 6,          // /s, lissage
-  CAM_LOOK: 26,         // m devant le skieur
+  CAM_LOOK: 20,         // m devant le skieur
   FOV_BASE: 62,
   FOV_FAST: 88,
   FOV_RATE: 2.5,
+  TREE_GAP: 16,         // m entre deux arbres du réseau
   GRID_NX: 96,
   GRID_NZ: 128,
   CELL: 3.2,            // m entre deux sommets du maillage
