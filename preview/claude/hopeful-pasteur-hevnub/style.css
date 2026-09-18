@@ -63,7 +63,8 @@ html, body {
 }
 .hud-left { display: flex; align-items: baseline; gap: 10px; }
 .hud-center { font-size: 26px; }
-.hud-right { display: flex; align-items: baseline; gap: 6px; font-size: 18px; }
+.hud-right { display: flex; align-items: baseline; gap: 5px; font-size: 20px; }
+.unit { font-size: 12px; font-weight: 600; opacity: 0.7; margin-right: 4px; }
 .chain {
   color: var(--accent);
   font-size: 18px;

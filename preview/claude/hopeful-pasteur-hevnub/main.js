@@ -1,15 +1,17 @@
-// Point d'entrée : boucle, pas fixe, input, machine à états. Voir SPEC.md §4, §7.
-// Rien de pur ici : c'est le seul fichier qui a le droit de connaître le DOM et l'horloge.
+// Point d'entrée : boucle, pas fixe, input, machine à états. Voir SPEC.md §5, §7.
+// Seul fichier qui connaît le DOM et l'horloge.
 import { STEP, TUNING, createState, step } from './physics.js'
 import * as render from './render.js'
 import * as audio from './audio.js'
 
-const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag d'une seconde traverse le terrain
+const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
 const canvas = document.getElementById('game')
 const titleScreen = document.getElementById('title')
+const hud = document.getElementById('hud')
+const elSpeed = document.getElementById('speed')
+const elDist = document.getElementById('dist')
 
-// Seed : lue dans l'URL, sinon tirée et écrite dedans. L'adresse porte toujours la piste en cours.
 function readSeed() {
   const raw = new URLSearchParams(location.search).get('seed')
   const n = raw === null ? NaN : parseInt(raw, 10)
@@ -31,61 +33,94 @@ function resize() {
 }
 
 let paused = false
-let inputLock = 0   // ignore l'input juste après un changement d'écran (SPEC §7)
+let pointerId = -1, pointerOrigin = 0, pointerSteer = 0
+let keyLeft = false, keyRight = false, keySteer = 0
 
-// Le même geste lance la run et commence à charger.
-function press() {
-  if (inputLock > 0) return
-  audio.init()                     // iOS refuse le son hors d'un geste : c'est ici ou nulle part
-  if (state.phase === 'title') {
-    state.phase = 'run'
-    titleScreen.hidden = true
-  }
-  state.pressed = true
+function startRun() {
+  if (state.phase !== 'title') return
+  state.phase = 'run'
+  titleScreen.hidden = true
+  hud.hidden = false
 }
 
-function release() { state.pressed = false }
+canvas.addEventListener('pointerdown', (e) => {
+  audio.init()                       // iOS refuse le son hors d'un geste
+  startRun()
+  if (pointerId !== -1) return
+  pointerId = e.pointerId
+  pointerOrigin = e.clientX
+  pointerSteer = 0
+})
 
-function pause() {
-  state.pressed = false
-  paused = true
-  audio.suspend()
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== pointerId) return
+  // Le glissement horizontal depuis le point de contact donne la carre.
+  pointerSteer = clamp((e.clientX - pointerOrigin) / TUNING.STEER_SPAN, -1, 1)
+})
+
+function endPointer(e) {
+  if (e.pointerId !== pointerId) return
+  pointerId = -1
+  pointerSteer = 0
 }
+canvas.addEventListener('pointerup', endPointer)
+canvas.addEventListener('pointercancel', endPointer)
 
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keyLeft = true; e.preventDefault(); startRun() }
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') { keyRight = true; e.preventDefault(); startRun() }
+  if (e.code === 'Space') { e.preventDefault(); startRun() }
+})
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') keyLeft = false
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') keyRight = false
+})
+
+function pause() { paused = true; audio.suspend() }
 function unpause() {
   if (!paused) return
   paused = false
-  last = -1                        // on repart du temps courant, jamais de rattrapage
+  last = -1                          // on repart du temps courant, jamais de rattrapage
   acc = 0
   audio.resume()
 }
-
-window.addEventListener('pointerdown', press)
-window.addEventListener('pointerup', release)
-window.addEventListener('pointercancel', release)
-window.addEventListener('keydown', (e) => {
-  if (e.repeat) return
-  if (e.code === 'Space' || e.code === 'ArrowDown') { e.preventDefault(); press() }
-})
-window.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' || e.code === 'ArrowDown') release()
-})
-window.addEventListener('blur', pause)
+window.addEventListener('blur', () => { pointerId = -1; pointerSteer = 0; keyLeft = keyRight = false; pause() })
 window.addEventListener('focus', unpause)
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else unpause() })
 window.addEventListener('contextmenu', (e) => e.preventDefault())
 window.addEventListener('resize', resize)
 window.addEventListener('orientationchange', resize)
 
-// render.js et audio.js réagissent aux événements, ils ne lisent jamais la physique en cours de pas.
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
+
+// Le doigt est prioritaire sur le clavier, et la carre revient toujours à 0 toute seule.
+function updateSteer(dt) {
+  const T = TUNING
+  const dir = (keyRight ? 1 : 0) - (keyLeft ? 1 : 0)
+  if (dir !== 0) keySteer = clamp(keySteer + dir * dt / T.KEY_RAMP, -1, 1)
+  else keySteer -= keySteer * (1 - Math.exp(-dt / T.STEER_RETURN))
+
+  if (pointerId !== -1) state.steer = pointerSteer
+  else if (dir !== 0 || Math.abs(keySteer) > 0.001) state.steer = keySteer
+  else state.steer -= state.steer * (1 - Math.exp(-dt / T.STEER_RETURN))
+}
+
 function drain() {
   const events = state.events
-  const level = Math.min(state.chain, TUNING.MULT_TABLE.length - 1)
   for (let i = 0; i < events.length; i++) {
     render.fx(events[i], state)
-    audio.play(events[i], level)
+    audio.play(events[i], 0)
   }
   events.length = 0
+}
+
+let lastSpeed = -1, lastDist = -1
+function updateHud() {
+  const kmh = Math.round(state.s * 3.6)
+  if (kmh !== lastSpeed) { elSpeed.textContent = kmh; lastSpeed = kmh }
+  const d = Math.round(state.dist)
+  if (d !== lastDist) { elDist.textContent = d; lastDist = d }
 }
 
 let last = -1, acc = 0
@@ -96,14 +131,14 @@ function frame(now) {
   let dt = (now - last) / 1000
   last = now
   if (dt > MAX_FRAME) dt = MAX_FRAME
-  if (inputLock > 0) inputLock -= dt
 
   if (!paused && state.phase === 'run') {
+    updateSteer(dt)
     acc += dt
     while (acc >= STEP) { step(state, STEP); acc -= STEP }
     drain()
+    updateHud()
   }
-  audio.setCharge(state.charge, state.pressed && state.grounded)
   render.draw(state, dt)
 }
 

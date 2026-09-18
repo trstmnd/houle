@@ -7,9 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Descente de dunes, un doigt, 60 secondes.">
+<meta name="description" content="Descente de ski infinie, un doigt, 60 secondes.">
 <title>Houle</title>
 <link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }
+</script>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -21,13 +24,14 @@
   </div>
   <div class="hud-center"><span id="timer">60</span></div>
   <div class="hud-right">
-    <span id="wind-arrow">→</span><span id="wind-value">0</span>
+    <span id="speed">0</span><span class="unit">km/h</span>
+    <span id="dist">0</span><span class="unit">m</span>
   </div>
 </div>
 
 <section id="title">
   <h1>Houle</h1>
-  <p class="how">Maintiens dans les creux.<br>Lâche avant la crête.<br>Traverse les anneaux.</p>
+  <p class="how">Glisse le doigt pour virer.<br>Virer freine, tiens ta ligne.<br>Les bosses te décollent.</p>
   <p class="meta">Piste <span id="title-seed">000000</span> · record <span id="title-best">0</span></p>
   <p class="cta" id="title-cta">Touche pour partir</p>
 </section>
