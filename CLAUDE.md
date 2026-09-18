@@ -45,7 +45,7 @@ Français dans les commentaires, les commits et les messages. Identifiants en an
 
 Une ligne par session, tenue à jour par l'agent à chaque push. C'est ce que lit la session suivante.
 
-- Session 1 (samedi 19/09 matin) : blocs 1 et 2 faits (terrain.js, physics.js : sol, charge, décollage, vol, réception simplifiée). Blocs 3 et 4 à faire
+- Session 1 (samedi 19/09 matin) : les 4 blocs sont faits, ça roule, ça charge, ça décolle, ça retombe. Reste le réglage au pouce (§10, étapes 1 et 2)
 - Session 2 (samedi 19/09 après-midi) : à faire
 - Session 3 (dimanche 20/09 matin) : à faire
 - Session 4 (dimanche 20/09 après-midi) : à faire
