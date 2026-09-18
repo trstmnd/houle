@@ -65,6 +65,8 @@ export const TUNING = {
   MULT_TABLE: [1, 2, 3, 5, 8],
 
   // Caméra et rendu, lus par render.js
+  CAM_CLEAR: 1.8,       // m au-dessus de la neige : sous ce seuil la caméra traverse le sol
+                        // et on voit le ciel à travers, les faces arrière n'étant pas dessinées
   CAM_BACK: 8.5,
   CAM_UP: 3.6,
   CAM_RATE: 6,          // /s, lissage
@@ -263,6 +265,10 @@ function stepCamera(state, dt) {
   cam.y += (state.y + T.CAM_UP - cam.y) * k
   cam.z += (state.z - dz * T.CAM_BACK - cam.z) * k
   // Le champ de vision s'ouvre avec la vitesse : le meilleur retour de vitesse qui existe.
+  // La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
+  const sol = state.terrain.height(cam.x, cam.z) + T.CAM_CLEAR
+  if (cam.y < sol) cam.y = sol
+
   const f = (state.s - T.START_SPEED) / (T.MAX_SPEED - T.START_SPEED)
   const target = T.FOV_BASE + (T.FOV_FAST - T.FOV_BASE) * clamp(f, 0, 1)
   cam.fov += (target - cam.fov) * (1 - Math.exp(-T.FOV_RATE * dt))
