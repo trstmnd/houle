@@ -1,4 +1,6 @@
-# Houle : spec v3, ski 3D
+# Ski 3000 : spec v3
+
+> Le jeu s'appelle **Ski 3000**. Le dépôt, la branche et l'URL gardent le nom `houle`, c'est sans conséquence.
 
 > Descente de montagne infinie, vue 3/4 arrière, un doigt. Tu tiens ta ligne, tu prends les bosses, tu passes les portes. 60 secondes. Deux compétences qui s'opposent : la vitesse et la précision.
 >
