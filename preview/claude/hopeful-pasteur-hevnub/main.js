@@ -4,6 +4,10 @@ import { STEP, TUNING, createState, step } from './physics.js'
 import * as render from './render.js'
 import * as audio from './audio.js'
 
+// Version affichée sur l'écran d'accueil. À monter d'un cran à chaque push qui change le jeu :
+// c'est le seul moyen de savoir, sur un téléphone, si on joue bien la dernière.
+const VERSION = '0.7.0'
+
 const MAX_FRAME = 1 / 30   // borne du dt de frame : sans elle, un lag traverse la montagne
 
 const canvas = document.getElementById('game')
@@ -48,6 +52,7 @@ function writeBest(key, v) {
 const seedKey = 'houle:best:' + seed
 let best = readBest(seedKey)
 setText('title-seed', String(seed).padStart(6, '0'))
+setText('title-version', VERSION)
 setText('title-best', best)
 
 function setText(id, v) { document.getElementById(id).textContent = v }
