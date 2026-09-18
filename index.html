@@ -7,41 +7,74 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Descente de dunes, un doigt, 60 secondes.">
-<title>Houle</title>
+<meta name="description" content="Ski 3000 : descente de ski infinie, un doigt, 60 secondes.">
+<title>Ski 3000</title>
 <link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }
+</script>
 </head>
 <body>
 <canvas id="game"></canvas>
 
 <div id="hud" hidden>
-  <div class="hud-left">
-    <span id="score">0</span>
-    <span id="chain" class="chain" hidden>×1</span>
+  <div class="hud-row">
+    <div class="stat stat-time"><b id="timer">60</b><span>s</span></div>
+    <div class="stat stat-dist"><b id="dist">0</b><span>m</span></div>
   </div>
-  <div class="hud-center"><span id="timer">60</span></div>
-  <div class="hud-right">
-    <span id="wind-arrow">→</span><span id="wind-value">0</span>
+  <div class="speedo">
+    <b id="speed">0</b><span>km/h</span>
+    <div class="bar"><i id="speed-bar"></i></div>
   </div>
+  <div class="jump" id="jump" hidden><b id="jump-len">0</b><span>m</span></div>
+  <div id="flash" class="flash"></div>
 </div>
 
+<div id="pads">
+  <button class="pad pad-l" id="pad-l" type="button" aria-label="Virer à gauche">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" /></svg>
+    <em>←</em>
+  </button>
+  <button class="pad pad-jump" id="pad-jump" type="button" aria-label="Charger et sauter">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19 L12 5 M6 11 L12 5 L18 11" /></svg>
+    <em>espace</em>
+    <i class="gauge"><s id="charge-bar"></s></i>
+  </button>
+  <button class="pad pad-r" id="pad-r" type="button" aria-label="Virer à droite">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" /></svg>
+    <em>→</em>
+  </button>
+</div>
+
+<div id="tuto" hidden><b id="tuto-text"></b></div>
+
 <section id="title">
-  <h1>Houle</h1>
-  <p class="how">Maintiens dans les creux.<br>Lâche avant la crête.<br>Traverse les anneaux.</p>
-  <p class="meta">Piste <span id="title-seed">000000</span> · record <span id="title-best">0</span></p>
-  <p class="cta" id="title-cta">Touche pour partir</p>
+  <div class="panel">
+    <h1>Ski 3000</h1>
+    <p class="tag">Descente infinie, 60 secondes</p>
+    <ul class="rules">
+      <li><em>Glisse</em> le doigt pour virer</li>
+      <li><em>Virer freine</em> : tiens ta ligne</li>
+      <li><em>Les bosses</em> te décollent</li>
+    </ul>
+    <p class="cta" id="title-cta">Touche pour partir</p>
+    <p class="meta">Piste <b id="title-seed">000000</b> · record <b id="title-best">0</b> m</p>
+    <p class="version">v<b id="title-version">0.0.0</b></p>
+  </div>
 </section>
 
 <section id="end" hidden>
-  <p class="label">Score</p>
-  <p class="big" id="end-score">0</p>
-  <p class="meta">Record sur cette piste <span id="end-best">0</span> · piste <span id="end-seed">000000</span></p>
-  <div class="actions">
-    <button id="btn-replay" type="button">Rejouer cette piste</button>
-    <button id="btn-new" type="button">Nouvelle piste</button>
-    <button id="btn-share" type="button">Partager le défi</button>
+  <div class="panel">
+    <p class="label">Descente</p>
+    <p class="big"><b id="end-dist">0</b><span>m</span></p>
+    <p class="meta">Record sur cette piste <b id="end-best">0</b> m · piste <b id="end-seed">000000</b></p>
+    <div class="actions">
+      <button id="btn-replay" type="button">Rejouer cette piste</button>
+      <button id="btn-new" type="button">Nouvelle piste</button>
+      <button id="btn-share" type="button">Partager le défi</button>
+    </div>
+    <p class="toast" id="toast" hidden>Lien copié</p>
   </div>
-  <p class="toast" id="toast" hidden>Lien copié</p>
 </section>
 
 <script type="module" src="main.js"></script>
