@@ -177,7 +177,7 @@ Toutes dans `TUNING` (`physics.js`), en mètres et secondes. Points de départ, 
 | `RUN_TIME` | 60 | s |
 | `R1, R2, R3` | 2.2, 1.6, 5.0 | Amplitudes du relief, m |
 | `MOG_AMP` | 0.85 | Amplitude des bosses, m |
-| `GATE_GAP` | 140 | m entre deux portes |
+| `GATE_GAP` | 105 | m entre deux portes |
 | `GATE_W` | 9 | m entre les fanions |
 | `FOV_BASE, FOV_FAST` | 62, 88 | Degrés |
 | `CAM_BACK, CAM_UP` | 11, 4.5 | Position de la caméra, m |
