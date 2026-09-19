@@ -1,6 +1,7 @@
 // Physique du ski. PUR : aucun three, document, window, performance, Date, Math.random.
 // Mètres et secondes. Tout le feel vit dans TUNING. Voir SPEC.md §5, §9.
 import * as terrain from './terrain.js'
+import * as gates from './gates.js'
 
 export const STEP = 1 / 120
 
@@ -12,11 +13,23 @@ export const TUNING = {
   MIN_SPEED: 2,
   START_SPEED: 12,
   TURN_RATE: 1.1,       // rad/s à pleine carre
+  CROSS_TURN: 0.55,     // une pente latérale fait tourner le skieur vers le bas : sans ce terme,
+                        // la cuvette et les dévers ne servent à rien, on les traverse sans les sentir
   FALL_ALIGN: 1.4,      // /s, rappel du cap vers l axe de la piste quand la carre est lâchée
   EDGE_DRAG: 0.45,      // /s à steer = 1 : virer coûte, c'est tout l'arbitrage du jeu
   FRICTION: 0.06,       // /s, neige damée
   AIR_DRAG: 0.0012,     // /m, pose la vitesse terminale
   DEEP_DRAG: 0.4,       // /s hors piste : un coût, pas un mur
+  TUCK_DRAG: 0.55,      // en œuf, la traînée tombe à cette fraction : c'est tout le gain de vitesse.
+                        // Les deux côtés tenus à la fois, donc plus de carre et plus de saut : le
+                        // prix de l'œuf, c'est de ne plus pouvoir viser pendant qu'on accélère
+  // La piste serpente et se creuse en cuvette : ce sont ses bords qui te ramènent dedans.
+  TRACK_BEND1: 46,      // m, amplitude du grand lacet
+  TRACK_LEN1: 700,      // m, sa longueur d'onde
+  TRACK_BEND2: 15,      // m, le petit lacet par-dessus
+  TRACK_LEN2: 290,
+  BANK_H: 14,           // m, relevé maximal des bords, atteint loin de la piste
+  BANK_W: 55,           // m, largeur de la remontée. Plafonnée, sinon on creuse un canyon
   TRACK_HALF: 45,       // m, demi-largeur : plus étroit, un virage tenu sort de la piste en 5 s
 
   // Vol et réception
@@ -65,9 +78,12 @@ export const TUNING = {
   JUMP_SHORT: 18,       // m : en dessous, saut court
   JUMP_MID: 45,         // m : en dessous, saut moyen, au-dessus saut long
 
-  // Portes (bloc 3)
-  GATE_GAP: 140,
-  GATE_W: 9,
+  // Portes
+  GATE_GAP: 105,        // m entre deux portes
+  GATE_W: 9,            // m entre les deux fanions
+  GATE_H: 4,            // m de haut : au-dessus, on est passé par-dessus, ça ne compte pas
+  GATE_VALUE: 10,       // points, avant multiplicateur
+  GATE_POOL: 12,        // portes vivantes à la fois
   MULT_TABLE: [1, 2, 3, 5, 8],
 
   // Caméra et rendu, lus par render.js
@@ -76,6 +92,8 @@ export const TUNING = {
   CAM_BACK: 8.5,
   CAM_UP: 3.6,
   CAM_RATE: 6,          // /s, lissage
+  CAM_ROLL: 0.16,       // rad d'inclinaison de la caméra à pleine carre : l'horizon penche dans le virage
+  CAM_ROLL_RATE: 4,     // /s, lissage de cette inclinaison
   CAM_LOOK: 20,         // m devant le skieur
   FOV_BASE: 62,
   FOV_FAST: 88,
@@ -101,7 +119,7 @@ export function wrapAngle(a) {
 export function createState(seed) {
   const ter = terrain.create(seed)
   const g = ter.sample(0, 0)
-  return {
+  const state = {
     phase: 'title',
     seed, terrain: ter,
     t: 0, ending: false,
@@ -114,14 +132,18 @@ export function createState(seed) {
     grounded: true,
     airTime: 0,
     press: false, wasPress: false, charge: 0,
+    tuck: false,                   // œuf : les deux côtés tenus en même temps
     jumpX: 0, jumpZ: 0, lastJump: 0, bestJump: 0,
     wipe: 0,                       // temps de chute restant
     dist: 0,                       // mètres descendus
     score: 0, chain: 0, mult: 1,
-    gates: [], gatesUpto: 0,
+    gates: [], gatesUpto: 0, lastGate: null,
     events: [],
-    cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE },
+    cam: { x: 0, y: g.y + TUNING.CAM_UP, z: TUNING.CAM_BACK, fov: TUNING.FOV_BASE, roll: 0 },
   }
+  gates.create(state)
+  clampCamera(state)
+  return state
 }
 
 /** Un pas fixe. Remplit state.events ('takeoff', 'land_flat', 'land_hard', 'wipe', 'gate', 'end'). */
@@ -138,6 +160,7 @@ export function step(state, dt) {
     state.wipe -= dt
     state.steer = 0                // pendant la chute, le doigt ne sert à rien
     state.press = false
+    state.tuck = false
   }
 
   // La détente part au relâcher, pas à l'appui : c'est le timing qui fait le saut.
@@ -150,8 +173,11 @@ export function step(state, dt) {
     state.charge -= state.charge * (1 - Math.exp(-6 * dt))
   }
 
+  const px = state.x, pz = state.z
   if (state.grounded) stepGround(state, dt)
   else stepAir(state, dt)
+  gates.check(state, px, pz)
+  gates.ensure(state)
 
   const target = state.wipe > 0 ? 0 : state.steer
   state.lean += (target - state.lean) * (1 - Math.exp(-8 * dt))
@@ -168,16 +194,18 @@ function stepGround(state, dt) {
   let s = state.s
   const gEff = T.G * (state.press ? T.PRESS_MULT : 1)
   s += -gEff * hd * inv * dt                // la gravité pousse dans la pente, doublée si on plaque
-  const deep = Math.abs(state.x) > T.TRACK_HALF ? T.DEEP_DRAG : 0
+  const deep = Math.abs(state.x - state.terrain.centre(state.z)) > T.TRACK_HALF ? T.DEEP_DRAG : 0
   s -= (T.FRICTION + T.EDGE_DRAG * Math.abs(state.steer) + deep) * s * dt
-  s -= T.AIR_DRAG * s * s * dt
+  const oeuf = state.tuck && state.wipe <= 0
+  s -= T.AIR_DRAG * (oeuf ? T.TUCK_DRAG : 1) * s * s * dt
   s = clamp(s, T.MIN_SPEED, T.MAX_SPEED)
 
   state.heading += state.steer * T.TURN_RATE * dt
   // La pente ramène le skieur dans l'axe quand il lâche la carre. Sans ça, un doigt ne suffit pas :
-  // on part en travers et on ne revient jamais. C'est l'axe de la piste, pas la pente locale : suivre
-  // les vaguelettes ferait dériver le skieur hors piste en ligne droite.
-  state.heading -= wrapAngle(state.heading) * T.FALL_ALIGN * (1 - Math.abs(state.steer)) * dt
+  // on part en travers et on ne revient jamais. L'axe visé est la tangente de la piste, qui
+  // serpente : lâcher la carre suit la courbe, ce qui est exactement ce qu'on veut sentir.
+  const axe = Math.atan(-state.terrain.centreSlope(state.z))
+  state.heading -= wrapAngle(state.heading - axe) * T.FALL_ALIGN * (1 - Math.abs(state.steer)) * dt
   const ndx = Math.sin(state.heading), ndz = -Math.cos(state.heading)
   state.x += s * ndx * dt
   state.z += s * ndz * dt
@@ -191,6 +219,11 @@ function stepGround(state, dt) {
   state.vx = s * ndx * ninv
   state.vy = s * nhd * ninv
   state.vz = s * ndz * ninv
+
+  // Le dévers pousse vers le bas : c'est ce qui donne du sens aux bords relevés de la piste.
+  const rx = Math.cos(state.heading), rz = Math.sin(state.heading)
+  const devers = ng.hx * rx + ng.hz * rz    // positif si le terrain monte à droite du skieur
+  state.heading -= T.G * devers * T.CROSS_TURN / Math.max(s, 6) * dt
 
   if (state.wipe > 0) return                // on ne décolle pas pendant une chute
   // Courbure du sol le long du cap : positive sur un dos de bosse.
@@ -262,8 +295,7 @@ function land(state, g) {
   } else {
     state.s = T.WIPE_SPEED
     state.wipe = T.WIPE_TIME
-    state.chain = 0
-    state.mult = T.MULT_TABLE[0]
+    gates.breakChain(state)
     state.events.push('wipe')
   }
 
@@ -297,14 +329,26 @@ function stepCamera(state, dt) {
   cam.x += (state.x - dx * T.CAM_BACK - cam.x) * k
   cam.y += (state.y + T.CAM_UP - cam.y) * k
   cam.z += (state.z - dz * T.CAM_BACK - cam.z) * k
+  // L'horizon penche dans le virage. C'est faux physiquement et c'est exactement ce que font les
+  // jeux de glisse arcade : le virage se sent avant de se voir.
+  const roll = -state.lean * T.CAM_ROLL
+  cam.roll += (roll - cam.roll) * (1 - Math.exp(-T.CAM_ROLL_RATE * dt))
+
   // Le champ de vision s'ouvre avec la vitesse : le meilleur retour de vitesse qui existe.
-  // La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
-  const sol = state.terrain.height(cam.x, cam.z) + T.CAM_CLEAR
-  if (cam.y < sol) cam.y = sol
+  clampCamera(state)
 
   const f = (state.s - T.START_SPEED) / (T.MAX_SPEED - T.START_SPEED)
   const target = T.FOV_BASE + (T.FOV_FAST - T.FOV_BASE) * clamp(f, 0, 1)
   cam.fov += (target - cam.fov) * (1 - Math.exp(-T.FOV_RATE * dt))
+}
+
+// La caméra ne descend jamais sous la neige : sur un dos de bosse, elle y passait 35 % du temps.
+// Appelé aussi à la création, sinon l'écran de titre se retrouve enfoncé dans la colline, et on
+// voit le ciel à travers le sol.
+function clampCamera(state) {
+  const cam = state.cam
+  const sol = state.terrain.height(cam.x, cam.z) + TUNING.CAM_CLEAR
+  if (cam.y < sol) cam.y = sol
 }
 
 /** Direction du regard de la caméra, en mètres devant le skieur. Lue par render.js. */
